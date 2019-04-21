@@ -31,222 +31,362 @@ Monthly_CRSP_Bonds
 
 1. \textbf{Universe of Bonds: } 
 
-Following the instruction on the problem set 2, Download the monthly bond market data from WRDS. 
-Download the data from December 1925 to December 2018 so that you can get lagged total market capitalisation for portfolio weights calculation later on.
+Following the instruction on the problem set 2, Download the monthly bond market data from WRDS. We are focusing on the US Treasury bond return and total market capitalisation.
 
-TMRETNUA is the Monthly unadjusted return. TMTOTOUT is the total amount outstanding, which is used as market capitalisation.
+In the data, TMRETNUA is the Monthly unadjusted return. TMTOTOUT is the total amount outstanding, which is used as market capitalisation.
 
 2. \textbf{Missing returns: } 
 
    * Handle Missing Data denoted by the CRSP: CRSP denotes missing return as -99. Replace -99 as NA 
 ```{r, eval=FALSE}
-# Filter out missing Monthly Unadjusted Return
+  # Filter out missing Monthly Unadjusted Return
   bonddata[,`:=`(TMRETNUA, ifelse(TMRETNUA == -99.0, NA, TMRETNUA))]
 ```
 
   * Note: Missing return shouldn't be simply removed as the TMTOTOUT might not be NAs. We still need the data to calculate total market cap.
 
+3. \textbf{Market Capitalisation calculation: }
 
-
-
-
-```{r, eval=FALSE}
- # remove NAs
-  crsp_monthly <- crsp_monthly[PRC != "NA"]
-  crsp_monthly <- crsp_monthly[RET != "NA"]
-  crsp_monthly <- crsp_monthly[cumDivRet != "NA"]
-  crsp_monthly <- crsp_monthly[mktCapLagged != "NA"]
-``` 
-
-3. \textbf{Delisting return calculation:}
-
-To calculate the cum-dividend return, let return be cum-dividend return if delisting return is missing. 
-
-If delisting return is not missing and return is missing, let delisting return be just cum-dividend return.
-
-If both are not missing, use the formula from lecture notes:  (1 + DLRET)(1 + RET) - 1  to get the return.
-
-Delisting return that are not numeric are converted to NAs and removed later on.
-
-code:
-```{r, eval=FALSE}
-# calculates the cum-Dividend returns
-crsp_monthly[, `:=`(cumDivRet, ifelse(is.na(DLRET),RET,ifelse(is.na(RET), DLRET, (1+DLRET)*(1+RET)-1 )))]
-```
-
-4. \textbf{Market Capitalisation calculation: }
-There are some price that are negative, I take the absolute value for both price and shares outstanding and multiply them together to get the market capitalisation. Also I shift the market cap by 1 period for each firm. 
+To obtain lagged market capitalisation, shift TMTOTOUT by KYCRSPID
 
 ```{r, eval=FALSE}
-# calculate the marketcap
-crsp_monthly[, `:=`(ME, abs(PRC) * abs(SHROUT))]
-
-#lag the market cap of each firm
-crsp_monthly[, mktCapLagged := shift(ME), by=c("PERMNO")]
+  # lag the market by KYCRSPID
+  bonddata[,mktCapLagged := shift(TMTOTOUT), by=KYCRSPID]
+  mktcap <- bonddata[,list(Bond_lag_MV = sum(mktCapLagged, na.rm = TRUE)), by=list(Year, Month)]
 ```
 
-5. \textbf{Portfolio Weights: }
+4. \textbf{Portfolio Weights: }
 
-Value-weight the cum-dividend return by lagged market cap: $Weight_i = \frac{MarketCap_{i-1}}{Total \space MarketCap_{i-1}}$
+  * Value-weight the return by lagged market cap: $Weight_i = \frac{MarketCap_{i-1}}{Total \space MarketCap_{i-1}}$, then multiply by the return of the current period to obtain the value-weighted return
 
-For equal weight, just take the mean of returns for each period.
-
-```{r eval=FALSE}
- # value weight portfolio, this might be wrong, let's see
-  valueweight <- crsp_monthly[,list(Stock_Vw_Ret = weighted.mean(cumDivRet, mktCapLagged, na.rm = TRUE)),
-                                    by=list(Year, Month)]
-  # equal weight portfolio
-  equalweight <- crsp_monthly[,list(Stock_Ew_Ret = mean(cumDivRet)),by=list(Year, Month)]
+  * For equal weight, just take the mean of returns for each period.
+  
+  * Remember to have `na.rm =TRUE` when summing up the return of the bond, the total market cap and the total number of returns available. NAs in the bond return and lagged market capitalisation are not mututally exclusive. Hence we can't just simply remove the NAs before the calucation of the portfolio weights.
+  
+```{r, eval=FALSE}
+  valueweight <- bonddata[, list(Bond_Vw_Ret = sum(TMRETNUA*mktCapLagged, 
+  na.rm = TRUE)/sum(mktCapLagged,na.rm = TRUE)), by=list(Year, Month)]
+  
+  equalweight <- bonddata[, list(Bond_Ew_Ret = sum(TMRETNUA,
+  na.rm = TRUE)/length(!is.na(TMRETNUA))), by=list(Year, Month)]
 ```
 
-6. \textbf{Sample Period: }
-As I need to lag the market capitalisation while acquring data from Jan 1926 to Dec 2018, I have obtained data starting from Dec 1925 so that I have data for Jan 1926. 
+5. Sample Period: As I need to lag the market capitalisation while acquring data from Jan 1926 to
+Dec 2018, I have obtained data starting from Dec 1925 so that I have data for Jan 1926.
 
-7. \textbf{Definition of portfolio Weights: }
+6. \textbf{Definition of portfolio return: }
 
-As explained in part 5, portfolio return is the sum of all weighted return for that period. 
+Portfolio return is the sum of all weighted return for that period. 
 
-$$portfolio \space Return_i = \Sigma^{n}_{i=1} w_i * r_i$$
+$$Portfolio \space Return_i = \Sigma^{n}_{i=1} w_{i-1} * r_i$$
+
 Where n is the number of stocks at that time. 
-
 
 
 ## Question 2
 
-\textbf{Sample Data: } 
+\textbf{Summary:}
 
-  * Download Fama French 3 fator from the website
-  * Divide both Excess Return and Risk Free by 100 as the numbers are in percentage
-  * Truncated result from Qn1 to start from July 1929
+The resulting dataset:
 
-\textbf{Annualized Mean:}
-
-I use the monthly mean return and multiply by 12 to get annual data
-
-\textbf{Annualized Standard Deviation:}
-
-I use the monthly standard deviation return and multiply by $\sqrt{12}$ to get annualized data
-
-\textbf{Sharpe Ratio:}
-$$Sharpe \space Ratio = \frac{Annualized \space Mean}{Annualized \space Standard \space Deviation}$$
-\textbf{Skewness and Kurtosis:}
-
-Using library called `moments` to obtain the statistics.
-
-
-\textbf{Summary: }
-
-```{r echo=FALSE}
-library(moments)
-
-# load data from FF website
-FF_mkt <- as.data.table(read.csv("F-F_Research_Data_Factors.CSV"))
-
-# load data from Qn 1 output
-Monthly_CRSP_Stocks <- as.data.table(read.csv("Monthly_CRSP_Stocks.csv"))
-
-PS1_Q2 <- function(FF_mkt, Monthly_CRSP_Stocks){
-  # set column names to preferred column names
-  colnames(FF_mkt) <- c("date", "Mkt_RF","SMB","HML","RF")
-  
-  # subtset Monthly_CRSP_Stocks to contain only data from 1926 July
-  Monthly_CRSP_Stocks <- Monthly_CRSP_Stocks[7:dim(Monthly_CRSP_Stocks)[1],]
-  
-  # set the Risk free rate to decimal numbers
-  FF_mkt[, RF := RF  /100]
-  FF_mkt[, Mkt_RF := Mkt_RF/100]
-  
-  # put risk free rate in Monthly_CRSP_Stocks
-  Monthly_CRSP_Stocks <- cbind(Monthly_CRSP_Stocks, RFAunnual=FF_mkt$RF)
-  
-  # calculate the estimated return
-  Monthly_CRSP_Stocks[, EstimatedExMktRet := Stock_Vw_Ret - RFAunnual]
-  
-  # put estimated return in Monthly_CRSP_Stocks
-  Monthly_CRSP_Stocks <- cbind(Monthly_CRSP_Stocks,ActualExMktRet=FF_mkt$Mkt_RF)
-  
-  # get Estimated and actual 
-  ret <- Monthly_CRSP_Stocks[,.(EstimatedExMktRet,ActualExMktRet)] 
-  
-  AnnualizedMean <- c(mean(ret$EstimatedExMktRet) * 12 , mean(ret$ActualExMktRet) * 12)
-  AnnualizedSD <- c(sd(ret$EstimatedExMktRet) * sqrt(12) , sd(ret$ActualExMktRet) * sqrt(12))
-  AnnualizeSR <- c(AnnualizedMean[1]/AnnualizedSD[1], AnnualizedMean[2]/AnnualizedSD[2])
-  Skewness <- c(skewness(ret$EstimatedExMktRet),skewness(ret$ActualExMktRet))
-  ExcessKurtosis <-  c(kurtosis(ret$EstimatedExMktRet),kurtosis(ret$ActualExMktRet))-3
-  # find the annualized return, annualized volatility, sharpe ratio, skewness and excess kurtosis
-  summary <- data.table( Stats= c("Annualized Mean", "Annualized SD", "Sharpe Ratio","Skewness","Excess Kurtosis"),
-      EstimatedExMktRet = c(AnnualizedMean[1], AnnualizedSD[1], AnnualizeSR[1],Skewness[1],ExcessKurtosis[1]),
-                        ActualExMktRet = c(AnnualizedMean[2], AnnualizedSD[2], AnnualizeSR[2],Skewness[2],ExcessKurtosis[2]))
-  
-  return(summary)
-}
-
-PS1_Q2_ans <- PS1_Q2(FF_mkt, Monthly_CRSP_Stocks)
-PS1_Q2_ans
-
+```{r}
+Monthly_CRSP_Bonds <- as.data.table(read.csv("Monthly_CRSP_Universe.csv"))
+Monthly_CRSP_Bonds
 ```
 
+1. \textbf{Sample Data: }
 
+Obtain three datasets from Jan 1926 to Dec 2018:
+
+  * Monthly CRSP Stocks (Available from Problem set Qn1)
+  
+  * Monthly CRSP Bonds (Available from previous questions)
+  
+  * Monthly CRSP Riskless (On WRDS, it is theMonthly riskless rate of 30 and 90 days T-bill)
+  
+2. \textbf{Riskless rate calculation: }
+
+  * 30-day monthly T-bill return in the Monthly CRSP Riskless should be used to match the monthly return of the bonds and stock. 
+  
+  * Merge the stock and bond dataset into one datatable by year and month
+  
+```{r, eval=FALSE}
+  # merge stock and bonds data
+  ans <- merge(stocks, bonds,  by=c("Year", "Month"))
+  ans <- merge(ans, Monthly_CRSP_Riskless,  by=c("Year", "Month"))
+```
+  
+  * monthly stock / bond excess return = monthly stock / bond return  - 30-day T-bill return
+```{r, eval=FALSE}
+  # get excess return for stock and bond.
+  ans[,`:=`(Stock_Excess_Vw_Ret = (Stock_Vw_Ret - t30ret), 
+            Bond_Excess_Vw_Ret = (Bond_Vw_Ret - t30ret))]
+```
 
 ## Question 3
 
-\textbf{Sample Data: }
+\textbf{Summary:}
 
-Truncated result from Qn1 to start from July 1929
+The resulting dataset:
 
-Find:
-  * Correlation between estimated excess return and actual excess return
-  * Maximum absolute difference between the two returns
-
-\textbf{Summary: }
-
-The correlation is almost 1 and, but the difference between the replicated portfolio and the one from French website is not zero.
-
-This could be due to the high precision used in the replicated portfolio (10 decimal places) where the data from Fama French has precision up to only 3 digits for excess return. 
-
-Another reason could be due to the change in historical data from CRSP:http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/Data_Library/changes_crsp.html
-
-Quote from the website:
-Please note: CRSP has recently completed the Pre62 Daily Data Series Project. The addition of these new daily data results in changes to month-end prices and to dividend ex-dates. These changes have resulted in many small changes to historical returns on my website.
-
-```{r echo=FALSE}
-# load data from FF website
-FF_mkt <- as.data.table(read.csv("F-F_Research_Data_Factors.CSV"))
-
-# load data from Qn 1 output
-Monthly_CRSP_Stocks <- as.data.table(read.csv("Monthly_CRSP_Stocks.csv"))
-
-PS1_Q3 <- function(FF_mkt,Monthly_CRSP_Stocks){
-  colnames(FF_mkt) <- c("date", "Mkt_RF","SMB","HML","RF")
-  
-  # subtset Monthly_CRSP_Stocks to contain only data from 1926 July
-  Monthly_CRSP_Stocks <- Monthly_CRSP_Stocks[7:dim(Monthly_CRSP_Stocks)[1],]
-  
-  # set the Risk free rate to decimal numbers
-  FF_mkt[, RF := RF  /100]
-  FF_mkt[, Mkt_RF := Mkt_RF/100]
-  
-  # put risk free rate in Monthly_CRSP_Stocks
-  Monthly_CRSP_Stocks <- cbind(Monthly_CRSP_Stocks, RFAunnual=FF_mkt$RF)
-  
-  # calculate the estimated return
-  Monthly_CRSP_Stocks[, EstimatedExMktRet := Stock_Vw_Ret - RFAunnual]
-  
-  # put estimated return in Monthly_CRSP_Stocks
-  Monthly_CRSP_Stocks <- cbind(Monthly_CRSP_Stocks,ActualExMktRet=FF_mkt$Mkt_RF)
-  
-  # get Estimated and actual 
-  ret <- Monthly_CRSP_Stocks[,.(EstimatedExMktRet,ActualExMktRet)] 
-  
-  summary <- c(cor(ret$EstimatedExMktRet,ret$ActualExMktRet), max(abs(ret$EstimatedExMktRet - ret$ActualExMktRet)))
-  names(summary) <- c("Correlation","Max difference")
-  return(summary)
-}
-
-PS1_Q3_ans <- PS1_Q3(FF_mkt,Monthly_CRSP_Stocks)
-PS1_Q3_ans
+```{r}
+Port_Rets <- as.data.table(read.csv("Port_Rets.csv"))
+Port_Rets
 ```
 
+\textbf{Sample Data: }
+
+Use the output of question 2 from Jan 1926 to Dec 2018. There are 4 portfolios that I am going to construct:
+
+  * Value-weighted portfolio return above riskless rate
+  
+  * 60-40 portfolio return above riskless rate
+  
+  * Unlevered Risk Parity portfolio return above riskless rate
+  
+  * Levered RP portfolio return above riskless rate
+  
+Since we have the excess return for bond and stock, all the portfolios we are going to construct are evaluted based on excess return.
+  
+Let $R_{stock,i}$  $R_and {bond,i}$ denote the excess return for stock and bond,  $w_{stock, i}$ and $w_{bond, i}$ denote the weights of stock and bond.
+
+
+
+  
+### Value-weighted portfolio return above riskless rate
+
+This portfolio is the value weight portfolio between the US stocks and US treasury bonds
+
+#### Portfolio weights
+Weights of stock and bond in the portfolio are:
+
+$$w_{stock, i} = \frac{Market Cap_{stock,i-1}}{Market Cap_{stock,i-1}  + Market Cap_{bond,i-1}}$$
+$$w_{bond, i} =  1 - w_{stock, i}$$
+
+#### Portfolio return
+
+Note: we don't need to lag the weights for portfolio calculation as the weights are already formed using lagged market capitalisation
+
+$$Portfolio \space Return_{i} =  w_{stock, i}R_{stock,i}  + w_{bond, i} R_{bond,i}$$
+
+
+```{r eval=FALSE}
+  # value weighted portfolio return
+  Monthly_CRSP_Universe[,stock_Vw_Weight := Stock_lag_MV/(Stock_lag_MV + Bond_lag_MV)]
+  Monthly_CRSP_Universe[,Excess_Vw_Ret := stock_Vw_Weight * Stock_Excess_Vw_Ret 
+                        + (1 - stock_Vw_Weight) * Bond_Excess_Vw_Ret]
+```
+
+
+
+
+### 60-40 portfolio return above riskless rate
+
+#### Portfolio weights
+Weights of stock and bond in the portfolio are:
+$w_{stock} =0.6$, $w_{bond} = 0.4$
+
+#### Portfolio return
+
+$$Portfolio \space Return_{i} = 0.6 \cdot R_{stock,i}  + 0.4 \cdot R_{bond,i}$$
+
+```{r eval=FALSE}
+  # 60-40 portfolio return above riskless rate
+  Monthly_CRSP_Universe[,Excess_60_40_Ret := 0.6 * Stock_Excess_Vw_Ret 
+                        + 0.4 * Bond_Excess_Vw_Ret]
+```
+
+
+
+
+### Unlevered Risk Parity portfolio return above riskless rate
+
+We are following the procedure from Asness et al's paper in 2012 to construct both levered and unlevered risk parity portfolio
+
+#### Portfolio weights
+
+In the risk parity portfolio, weights of each asset are denoted as 
+
+$$w_{t,i} = k_t \sigma_{t,i}^{-1}, \space i = 1,..,n$$ 
+where $\sigma_{t,i}$ is the volatility of the past 36 months and is calculated as follows:
+
+```{r eval=FALSE}
+  # find the inverse sigma hat of the stocks
+  # at the end of each calendar month,we estimated volatilities of all the available asset
+  # classes (using data up to month t – 1), hence we need to shift the data down by 1 row 
+  Monthly_CRSP_Universe[,Stock_inverse_sigma_hat := 
+  shift(1/rollapply(Stock_Excess_Vw_Ret,36, sd, fill=NA, align="right"))]
+```
+
+Similar approach for getting $\sigma_{t,bond}$:
+
+```{r eval=FALSE}
+  # similar approach to get Bond_inverse_sigma_hat
+  Monthly_CRSP_Universe[,Bond_inverse_sigma_hat := 
+  shift(1/rollapply(Bond_Excess_Vw_Ret,36, sd, fill=NA, align="right"))]
+```
+
+Hence, we get both `Stock_inverse_sigma_hat` and `Bond_inverse_sigma_hat` here.
+
+#### Value of K
+
+For unlevered portfolio, we use the following formula to get $k_t$:
+
+$$k_t = \frac{1}{\sigma_{t,bond}^{-1} + \sigma_{t,stock}^{-1}}$$
+
+```{r eval=FALSE}
+  # unlevered position, k = 1 / (sum of inverse sigma hat of the both assets)
+  Monthly_CRSP_Universe[,Unlevered_k := 1/(Stock_inverse_sigma_hat 
+                                           + Bond_inverse_sigma_hat)]
+```
+
+#### Return of the portfolio
+
+Now that we have obtained $k_t$ and volatility for stock and bond, we are able to calculate the weights of the asset using the 
+formula above and to get the return of the portfolio:
+
+$$r^{RP}_t = \Sigma_i w_{t-1,i}(r_{t,i} - rf_t)$$
+Where $r_{t,i} - rf_t$ is just the excess return for the asset.
+
+Note: the return of the current period is calculated using the weights of the previous month:
+
+```{r eval=FALSE}
+   # find unlevered risk parity portfolio return 
+  Monthly_CRSP_Universe[,Excess_Unlevered_RP_Ret := 
+  shift(Unlevered_k * Stock_inverse_sigma_hat) * Stock_Excess_Vw_Ret + 
+  shift(Unlevered_k * Bond_inverse_sigma_hat) * Bond_Excess_Vw_Ret]
+```
+
+
+
+
+### Risk Parity portfolio return above riskless rate
+
+#### Portfolio weights
+
+According to Asness's paper, we needd to set a constant $k$ to ensure the portfolio have the volatility that we want.
+
+This means that $w_{t,bond} = k \sigma_{t,bond}^{-1}$ and $w_{t,stock} = k \sigma_{t,stock}^{-1}$
+
+The paper suggested the value-weighted market portfolio or the 60/40 portfolio as the benchmark portfolio, I chose 
+value-weighted market portfolio to obtain the value of $k$
+
+#### Value of K
+
+Essentially, the idea is to set the portfolio weight in each asset class equal to the inverse of its volatility and use 
+these weights are multiplied by a constant to match the ex-post realized volatility of the Value-Weighted benchmark.
+
+Realized Volatility of Value Weighted Portfolio  = K * Annualized Volatility of the levered Risk Parity Portfolio
+
+Where Annualized Volatility of the levered Risk Parity Portfolio = $\sigma_{t,bond}^{-1} r_{t,bond} + \sigma_{t,stock}^{-1} r_{t,stock}$
+
+```{r eval=FALSE, tidy=TRUE}
+ vol_levered_port <- sd(shift(Monthly_CRSP_Universe$Stock_inverse_sigma_hat) * 
+                          Monthly_CRSP_Universe$Stock_Excess_Vw_Ret 
++ shift(Monthly_CRSP_Universe$Bond_inverse_sigma_hat) * 
+  Monthly_CRSP_Universe$Bond_Excess_Vw_Ret, na.rm = TRUE)
+  
+  # Formula: Realized_Vol = K * Annualized Volatility of the portfolio
+  # Annualized Volatility of the portfolio = sd (inversse sigma hat * Excess value weighted returns)
+  k <- sd(Monthly_CRSP_Universe$Excess_Vw_Ret)/vol_levered_port
+  
+  Monthly_CRSP_Universe[,Levered_k := k]
+```
+
+#### Return of the portfolio
+
+Since we have obtained the value of $k$, we can easily get the weights and hence the return using the same formula in unlevered RP portfolio
+to get the excess return.
+
+```{r eval =FALSE}
+Monthly_CRSP_Universe[,Excess_Levered_RP_Ret := shift(Levered_k * 
+Stock_inverse_sigma_hat) * Stock_Excess_Vw_Ret 
++ shift(Levered_k * Bond_inverse_sigma_hat) * Bond_Excess_Vw_Ret]
+```
+
+
+
+
+## Question 4
+
+\textbf{Summary:}
+
+After calculating all the portfolio returns, the resulting dataset is shown in Table 1
+```{r echo=FALSE}
+suppressMessages(library(knitr))
+suppressWarnings(library(kableExtra))
+summary <- as.data.table(read.csv("Q4_summary.csv", header = TRUE))
+summary<-cbind(c("CRSP stocks","CRSP bonds", "Value-weighted portfolio", "60/40 portfolio", "RP, unlevered", "RP"),summary)
+thiscolnames <- c("Portfolios","Excess Return","t-Stat. of Excess Return",
+"Volatility","Sharpe Ratio","Skewness","Excess Kurtosis")
+
+kable(summary, "latex", col.names = thiscolnames, booktabs =T,caption = "Historical Performance of the Risk Parity, Market, and 60/40 Portfolios", align ="l") %>% kable_styling(latex_options = c("striped", "scale_down"))
+
+```
+
+\textbf{Sample Data:}
+
+  * Use the output from question 3
+  
+  * Truncate the data from Jan 1930 to June 2010
+  
+```{r eval=FALSE}
+  # subset data by date 
+  Port_Rets[, date:= ymd(paste0(Year,'/',Month,'/01'))]
+  Port_Rets <- Port_Rets[date %between% c("1930-01-01", "2010-06-01")]
+  Port_Rets[, date:=NULL]
+```
+
+
+\textbf{Calculation of Stats:}
+
+#### Annualized Mean:
+
+I use the monthly mean return and multiply by 12 to get annual data
+
+#### T-stat of Annulized Mean:
+
+t-stat for the monthly portfolio returns at 5% siginificance level.
+
+#### Annualized Standard Deviation:
+
+I use the monthly standard deviation return and multiply by 12 to get annualized data
+
+#### Sharpe ratio:
+
+$$ Sharpe \space ratio = \frac{Annualized \space Mean}{Annualized \space Volatility}$$
+
+#### Skewness and Kurtosis:
+
+Using library called moments to obtain the statistics form monthly excess return
+of the portfolios
+
+Using CRSP stock as an example to show the implementaiton
+
+```{r eval=FALSE}
+  crsp_stock <- c()
+  crsp_stock[1] <-mean(Port_Rets$Stock_Excess_Vw_Ret, na.rm = TRUE) * 12 * 100
+  crsp_stock[2] <- t.test(Port_Rets$Stock_Excess_Vw_Ret,na.rm = TRUE)$statistic
+  crsp_stock[3] <- sd(Port_Rets$Stock_Excess_Vw_Ret, na.rm = TRUE) * sqrt(12) * 100
+  crsp_stock[4] <- as.double(crsp_stock[[1]])/as.double(crsp_stock[[3]])
+  crsp_stock[5] <- skewness(Port_Rets$Stock_Excess_Vw_Ret,na.rm = TRUE)
+  crsp_stock[6] <- kurtosis(Port_Rets$Stock_Excess_Vw_Ret,na.rm = TRUE) -3
+```
+
+
+#### Review of the result 
+
+The stats I have obtained is close to the result in the paper, but not exactly the same. However, it does not affect the conclusion from the paper that levered risk parity outperforms the other portfolios over the years. 
+
+One reason for the discrepancy is obvious, the stock return is different. While we followed the Fama French Procedure to replicate the market portfolio of the stock market. The author obtained CRSP Value-Weighted Index return (including dividends) as the aggregate stock return. Hence, the underlying constituting the RP portfolio is a bit different. 
+
+Relating to that, we will probably get a different value for K as we benchmark ourselves against value-weighted portfolio of the excess stock return, hence a different value for the excess retunr of the RP portfolio.
+
+Another reason is the differnt time period over which k is computed.
+
+In question 3, k is computed using data from January 1926 to December 2018, while the paper used data from from Jan 1929 to June 2010.
+
+However, the small differences between the results from the paper and my replicated portfolios don't seem to change the conclusion of the author that levered RP does outperform the other portfolios listed in table till this day.
 
 
 

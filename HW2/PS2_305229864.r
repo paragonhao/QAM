@@ -36,7 +36,7 @@ PS2_Q1 <- function(bonddata){
   mktcap <- bonddata[,list(Bond_lag_MV = sum(mktCapLagged, na.rm = TRUE)), by=list(Year, Month)]
   
   ans <- merge(merge(valueweight, equalweight, by=c("Year", "Month")), mktcap,  by=c("Year", "Month"))
-  return(ans)
+  return(ans[-1,])
 }
 
 Monthly_CRSP_Bonds <- PS2_Q1(bonddata)
@@ -115,7 +115,7 @@ PS2_Q3 <- function(Monthly_CRSP_Universe){
   
   
   # set the portfolio weight in each asset class equal to the inverse of its volatility
-  #these weights are multiplied by a constant to match the ex-post realized volatility of the Value-Weighted benchmark.
+  # these weights are multiplied by a constant to match the ex-post realized volatility of the Value-Weighted benchmark.
   # For comparison purposes,we set k such that the annualized volatility of this portfolio matches the ex post realized volatility of
   # the benchmark (the value-weighted market portfolio or the 60/40 portfolio).
   # Let's choose value-weighted as our benchmark
@@ -218,7 +218,8 @@ PS2_Q4 <- function(Port_Rets){
 }
 
 Q4_summary <- PS2_Q4(Port_Rets)
-write.table(Q4_summary, file = "Q4_summary.csv", row.names=FALSE, sep=",")
+rownames(Q4_summary) <-c("CRSP stocks","CRSP bonds", "Value-weighted portfolio", "60/40 portfolio", "RP, unlevered", "RP")
+write.table(Q4_summary, file = "Q4_summary.csv", row.names=TRUE, sep=",")
 
 
 
