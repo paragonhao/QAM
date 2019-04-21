@@ -18,7 +18,7 @@ PS2_Q1 <- function(bonddata){
   setkey(bonddata, MCALDT)
   
   # Filter out missing Monthly Unadjusted Return
-  bonddata[TMRETNUA == -99.0,TMRETNUA:= NA]
+  bonddata[,`:=`(TMRETNUA, ifelse(TMRETNUA == -99.0, NA, TMRETNUA))]
   
   # set the year and month as integer
   bonddata[,Year:= year(MCALDT)]
@@ -110,8 +110,8 @@ PS2_Q3 <- function(Monthly_CRSP_Universe){
   # unlevered position, k = 1 / (sum of inverse sigma hat of the both assets)
   Monthly_CRSP_Universe[,Unlevered_k := 1/(Stock_inverse_sigma_hat + Bond_inverse_sigma_hat)]
   # find unlevered risk parity portfolio return 
-  Monthly_CRSP_Universe[,Excess_Unlevered_RP_Ret := (Unlevered_k * Stock_inverse_sigma_hat * Stock_Excess_Vw_Ret 
-                                                     + Unlevered_k * Bond_inverse_sigma_hat * Bond_Excess_Vw_Ret)]
+  Monthly_CRSP_Universe[,Excess_Unlevered_RP_Ret := shift(Unlevered_k * Stock_inverse_sigma_hat) * Stock_Excess_Vw_Ret 
+                                                     + shift(Unlevered_k * Bond_inverse_sigma_hat) * Bond_Excess_Vw_Ret]
   
   
   # set the portfolio weight in each asset class equal to the inverse of its volatility
@@ -154,66 +154,66 @@ PS2_Q4 <- function(Port_Rets){
   
   # CRSP stocks
   crsp_stock <- c()
-  crsp_stock[1] <-mean(Port_Rets$Stock_Excess_Vw_Ret, na.rm = TRUE) * 12 
+  crsp_stock[1] <-mean(Port_Rets$Stock_Excess_Vw_Ret, na.rm = TRUE) * 12 * 100
   crsp_stock[2] <- t.test(Port_Rets$Stock_Excess_Vw_Ret,na.rm = TRUE)$statistic
-  crsp_stock[3] <- sd(Port_Rets$Stock_Excess_Vw_Ret, na.rm = TRUE) * sqrt(12)
+  crsp_stock[3] <- sd(Port_Rets$Stock_Excess_Vw_Ret, na.rm = TRUE) * sqrt(12) * 100
   crsp_stock[4] <- as.double(crsp_stock[[1]])/as.double(crsp_stock[[3]])
   crsp_stock[5] <- skewness(Port_Rets$Stock_Excess_Vw_Ret,na.rm = TRUE)
   crsp_stock[6] <- kurtosis(Port_Rets$Stock_Excess_Vw_Ret,na.rm = TRUE) -3
   
-  result <- as.data.frame(crsp_stock, col=1, row.names = 
-                            c("Annualized Mean","t-stat of Annualized Mean",
-                              "Annualized Standard Deviation","Annualized Sharpe Ratio","Skewness","Excess Kurtosis"))
+  result <- as.data.frame(round(crsp_stock,2), col=1, row.names = 
+                            c("Excess Return","t-Stat. of Excess Return",
+                              "Volatility","Sharpe Ratio","Skewness","Excess Kurtosis"))
   
   # CRSP bonds
   crsp_bonds <- c()
-  crsp_bonds[1] <-mean(Port_Rets$Bond_Excess_Vw_Ret, na.rm = TRUE) * 12 
+  crsp_bonds[1] <-mean(Port_Rets$Bond_Excess_Vw_Ret, na.rm = TRUE) * 12 * 100
   crsp_bonds[2] <- t.test(Port_Rets$Bond_Excess_Vw_Ret,na.rm = TRUE)$statistic
-  crsp_bonds[3] <- sd(Port_Rets$Bond_Excess_Vw_Ret, na.rm = TRUE) * sqrt(12)
+  crsp_bonds[3] <- sd(Port_Rets$Bond_Excess_Vw_Ret, na.rm = TRUE) * sqrt(12) * 100
   crsp_bonds[4] <- as.double(crsp_bonds[[1]])/as.double(crsp_bonds[[3]])
   crsp_bonds[5] <- skewness(Port_Rets$Bond_Excess_Vw_Ret,na.rm = TRUE)
   crsp_bonds[6] <- kurtosis(Port_Rets$Bond_Excess_Vw_Ret,na.rm = TRUE) -3
-  result <- cbind(result,crsp_bonds)
+  result <- cbind(result,round(crsp_bonds,2))
   
   # Value weight return
   VW_Portfolio <- c()
-  VW_Portfolio[1] <-mean(Port_Rets$Excess_Vw_Ret, na.rm = TRUE) * 12 
+  VW_Portfolio[1] <-mean(Port_Rets$Excess_Vw_Ret, na.rm = TRUE) * 12 * 100
   VW_Portfolio[2] <- t.test(Port_Rets$Excess_Vw_Ret,na.rm = TRUE)$statistic
-  VW_Portfolio[3] <- sd(Port_Rets$Excess_Vw_Ret, na.rm = TRUE) * sqrt(12)
+  VW_Portfolio[3] <- sd(Port_Rets$Excess_Vw_Ret, na.rm = TRUE) * sqrt(12) * 100
   VW_Portfolio[4] <- as.double(VW_Portfolio[[1]])/as.double(VW_Portfolio[[3]])
   VW_Portfolio[5] <- skewness(Port_Rets$Excess_Vw_Ret,na.rm = TRUE)
   VW_Portfolio[6] <- kurtosis(Port_Rets$Excess_Vw_Ret,na.rm = TRUE) -3
-  result <- cbind(result,VW_Portfolio)
+  result <- cbind(result,round(VW_Portfolio,2))
   
   # 60/40 portfolio
   Excess_60_40_Portfolio <- c()
-  Excess_60_40_Portfolio[1] <-mean(Port_Rets$Excess_60_40_Ret, na.rm = TRUE) * 12 
+  Excess_60_40_Portfolio[1] <-mean(Port_Rets$Excess_60_40_Ret, na.rm = TRUE) * 12 * 100
   Excess_60_40_Portfolio[2] <- t.test(Port_Rets$Excess_60_40_Ret,na.rm = TRUE)$statistic
-  Excess_60_40_Portfolio[3] <- sd(Port_Rets$Excess_60_40_Ret, na.rm = TRUE) * sqrt(12)
+  Excess_60_40_Portfolio[3] <- sd(Port_Rets$Excess_60_40_Ret, na.rm = TRUE) * sqrt(12) * 100
   Excess_60_40_Portfolio[4] <- as.double(Excess_60_40_Portfolio[[1]])/as.double(Excess_60_40_Portfolio[[3]])
   Excess_60_40_Portfolio[5] <- skewness(Port_Rets$Excess_60_40_Ret,na.rm = TRUE)
   Excess_60_40_Portfolio[6] <- kurtosis(Port_Rets$Excess_60_40_Ret,na.rm = TRUE) -3
-  result <- cbind(result,Excess_60_40_Portfolio)
+  result <- cbind(result,round(Excess_60_40_Portfolio,2))
   
   # unlevered RP
   Unlevered_RP_Portfolio <- c()
-  Unlevered_RP_Portfolio[1] <-mean(Port_Rets$Excess_Unlevered_RP_Ret, na.rm = TRUE) * 12 
+  Unlevered_RP_Portfolio[1] <-mean(Port_Rets$Excess_Unlevered_RP_Ret, na.rm = TRUE) * 12 * 100
   Unlevered_RP_Portfolio[2] <- t.test(Port_Rets$Excess_Unlevered_RP_Ret,na.rm = TRUE)$statistic
-  Unlevered_RP_Portfolio[3] <- sd(Port_Rets$Excess_Unlevered_RP_Ret, na.rm = TRUE) * sqrt(12)
+  Unlevered_RP_Portfolio[3] <- sd(Port_Rets$Excess_Unlevered_RP_Ret, na.rm = TRUE) * sqrt(12) * 100
   Unlevered_RP_Portfolio[4] <- as.double(Unlevered_RP_Portfolio[[1]])/as.double(Unlevered_RP_Portfolio[[3]])
   Unlevered_RP_Portfolio[5] <- skewness(Port_Rets$Excess_Unlevered_RP_Ret,na.rm = TRUE)
   Unlevered_RP_Portfolio[6] <- kurtosis(Port_Rets$Excess_Unlevered_RP_Ret,na.rm = TRUE) -3
-  result <- cbind(result,Unlevered_RP_Portfolio)
+  result <- cbind(result,round(Unlevered_RP_Portfolio,2))
   
   # levered RP
   Levered_RP_Portfolio <- c()
-  Levered_RP_Portfolio[1] <-mean(Port_Rets$Excess_Levered_RP_Ret, na.rm = TRUE) * 12 
+  Levered_RP_Portfolio[1] <-mean(Port_Rets$Excess_Levered_RP_Ret, na.rm = TRUE) * 12 * 100
   Levered_RP_Portfolio[2] <- t.test(Port_Rets$Excess_Levered_RP_Ret,na.rm = TRUE)$statistic
-  Levered_RP_Portfolio[3] <- sd(Port_Rets$Excess_Levered_RP_Ret, na.rm = TRUE) * sqrt(12)
+  Levered_RP_Portfolio[3] <- sd(Port_Rets$Excess_Levered_RP_Ret, na.rm = TRUE) * sqrt(12) * 100
   Levered_RP_Portfolio[4] <- as.double(Levered_RP_Portfolio[[1]])/as.double(Levered_RP_Portfolio[[3]])
   Levered_RP_Portfolio[5] <- skewness(Port_Rets$Excess_Levered_RP_Ret,na.rm = TRUE)
   Levered_RP_Portfolio[6] <- kurtosis(Port_Rets$Excess_Levered_RP_Ret,na.rm = TRUE) -3
-  result <- cbind(result, Levered_RP_Portfolio)
+  result <- cbind(result, round(Levered_RP_Portfolio,2))
   return(t(result))
 }
 
