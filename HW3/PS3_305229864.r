@@ -41,24 +41,42 @@ crsp_monthly[, Mkt_cap := abs(PRC) * SHROUT]
 setorder(crsp_monthly, PERMNO, date)
 crsp_monthly[, lag_Mkt_Cap := shift(Mkt_cap), by = PERMNO]
 
+# log the ret, shift 2 period
+crsp_monthly[, shifted_log_ret := log(shift(1 + Ret, n = 2, type = "lag"))]
+
+# to get rid of the stocks that has less than 13 months of return (current month + past 12 months = 13 months)
+crsp_monthly[, one := 1]
+permno_grp_by <- aggregate(crsp_monthly$one, by=list(PERMNO = crsp_monthly$PERMNO), FUN=sum)
+permnos_to_remove <- permno_grp_by[permno_grp_by$x<13,]$PERMNO
+crsp_monthly <- crsp_monthly[!PERMNO %in% permnos_to_remove]
+
 #Calculate cumulative returns
-crsp_monthly[,RET_2 := !is.na(shift(Ret,2)), by = PERMNO]
-crsp_monthly[,ValidMonths := rollapplyr(RET_2, 11, function(x){sum(x,na.rm=TRUE)}, fill=NA, partial=TRUE), by = PERMNO]
+rollingWin <- 11
 crsp_monthly[,c("Valid13Prc","ValidRet2"):=.(!is.na(shift(PRC,13)),!is.na(shift(Ret,2))),PERMNO]
-crsp_monthly[,Ranking_Ret := rollapplyr(log(shift(1+Ret,2)), 11, sum, fill=NA, partial = TRUE), PERMNO]
-crsp_monthly[!Valid13Prc | !ValidRet2 | is.na(lag_Mkt_Cap) | ValidMonths < 8, Ranking_Ret := NA]
+
+crsp_monthly[,Ranking_Ret := rollapplyr(shifted_log_ret, rollingWin, function(x){
+  if(sum(is.na(x)) >4){
+    return(NA)
+  }else{
+    return(sum(x, na.rm = TRUE))
+  }
+}, fill=NA, align="right", partial = TRUE), PERMNO]
+
+crsp_monthly[!Valid13Prc | !ValidRet2 | is.na(lag_Mkt_Cap), Ranking_Ret := NA]
 
 crsp_monthly <- crsp_monthly[Ranking_Ret != "NA"]
 crsp_final <- crsp_monthly[,.(PERMNO, date, SHRCD, EXCHCD, DLRET, PRC, RET, SHROUT, Year, Month, Ret ,lag_Mkt_Cap, Ranking_Ret)]
 
 # write cumulative return
-write.table(crsp_final, file = "CRSP_Stocks_Momentum.csv", row.names=FALSE, sep=",")
+#write.table(crsp_final, file = "CRSP_Stocks_Momentum.csv", row.names=FALSE, sep=",")
 
 
 ######################## PS3 Qn 2 ################################################ 
-rm(list=ls())
+#rm(list=ls())
 # import CRPS momentum data 1927 to 2018
-CRSP_Stocks_Momentum <- as.data.table(read.csv("CRSP_Stocks_Momentum.csv"))
+#CRSP_Stocks_Momentum <- as.data.table(read.csv("CRSP_Stocks_Momentum.csv"))
+
+CRSP_Stocks_Momentum <- crsp_final
 
 # DM decile
 CRSP_Stocks_Momentum[,DM_decile := cut(Ranking_Ret, breaks=quantile(Ranking_Ret,probs=c(0:10)/10), 
@@ -72,12 +90,14 @@ CRSP_Stocks_Momentum[,KF_decile := cut(Ranking_Ret, breaks=FFbreakpoints, labels
 CRSP_Stocks_Momentum[is.na(KF_decile) ,KF_decile := DM_decile]
 
 CRSP_Stocks_Momentum_final <- CRSP_Stocks_Momentum[,.(PERMNO, Year, Month, Ret, lag_Mkt_Cap,DM_decile,KF_decile)]
-write.table(CRSP_Stocks_Momentum_final, file = "CRSP_Stocks_Momentum_decile.csv", row.names=FALSE, sep=",")
+#write.table(CRSP_Stocks_Momentum_final, file = "CRSP_Stocks_Momentum_decile.csv", row.names=FALSE, sep=",")
 
 ######################## PS3 Qn 3 ################################################ 
-rm(list=ls())
+#rm(list=ls())
 # import CRPS momentum to 2018
-CRSP_Stocks_Momentum_decile <- as.data.table(read.csv("CRSP_Stocks_Momentum_decile.csv"))
+#CRSP_Stocks_Momentum_decile <- as.data.table(read.csv("CRSP_Stocks_Momentum_decile.csv"))
+
+CRSP_Stocks_Momentum_decile <- CRSP_Stocks_Momentum_final
 
 # import Fama French
 FF_mkt <- as.data.table(read.csv("F-F_Research_Data_Factors.csv"))
