@@ -120,11 +120,11 @@ DM_decile_data <- CRSP_Stocks_Momentum_decile[,.(PERMNO, Year, Month, Ret, lag_M
 FF_decile_data <- CRSP_Stocks_Momentum_decile[,.(PERMNO, Year, Month, Ret, lag_Mkt_Cap, KF_decile)]
 
 # DM portfolio
-DM_portfolio <- DM_decile_data[,.(DM_Ret = weighted.mean(Ret, lag_Mkt_Cap, na.rm = TRUE)), .(Year, Month, DM_decile)]
+DM_portfolio <- DM_decile_data[,.(DM_Ret = sum(lag_Mkt_Cap * Ret, na.rm = T)/(sum(lag_Mkt_Cap,na.rm=T))), .(Year, Month, DM_decile)]
 setkey(DM_portfolio, Year, Month, DM_decile)
 
 # KF decile
-FF_portfolio <- FF_decile_data[,.(KRF_Ret = weighted.mean(Ret, lag_Mkt_Cap,na.rm = TRUE)), .(Year, Month, KF_decile)]
+FF_portfolio <- FF_decile_data[,.(KRF_Ret = sum(lag_Mkt_Cap * Ret, na.rm = T)/(sum(lag_Mkt_Cap,na.rm=T))), .(Year, Month, KF_decile)]
 setkey(FF_portfolio, Year, Month, KF_decile)
 
 # Merge the two portfolios together
