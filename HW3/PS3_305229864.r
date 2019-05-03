@@ -36,13 +36,13 @@ crsp_monthly[, SHROUT := as.numeric(as.character(SHROUT))]
 # calculates the cum-Dividend returns
 crsp_monthly[, `:=`(Ret, ifelse(is.na(DLRET),RET,ifelse(is.na(RET), DLRET, (1+DLRET)*(1+RET)-1 )))]
 
+# log the ret, shift 2 period
+crsp_monthly[, shifted_log_ret := log(shift(1 + Ret, n = 2, type = "lag")), by= PERMNO]
+
 # Market Cap 
 crsp_monthly[, Mkt_cap := abs(PRC) * SHROUT]
 setorder(crsp_monthly, PERMNO, date)
 crsp_monthly[, lag_Mkt_Cap := shift(Mkt_cap), by = PERMNO]
-
-# log the ret, shift 2 period
-crsp_monthly[, shifted_log_ret := log(shift(1 + Ret, n = 2, type = "lag"))]
 
 # to get rid of the stocks that has less than 13 months of return (current month + past 12 months = 13 months)
 crsp_monthly[, one := 1]
@@ -50,9 +50,9 @@ permno_grp_by <- aggregate(crsp_monthly$one, by=list(PERMNO = crsp_monthly$PERMN
 permnos_to_remove <- permno_grp_by[permno_grp_by$x<13,]$PERMNO
 crsp_monthly <- crsp_monthly[!PERMNO %in% permnos_to_remove]
 
-#Calculate cumulative returns
+#Find if the price at t-13 is missing , and if ret at t-2 is missing 
 rollingWin <- 11
-crsp_monthly[,c("Valid13Prc","ValidRet2"):=.(!is.na(shift(PRC,13)),!is.na(shift(Ret,2))),PERMNO]
+crsp_monthly[,c("isAvailT_minus_13","isAvailT_minus_2") := .(!is.na(shift(PRC,13)), !is.na(shifted_log_ret)), by = PERMNO]
 
 crsp_monthly[,Ranking_Ret := rollapplyr(shifted_log_ret, rollingWin, function(x){
   if(sum(is.na(x)) >4){
@@ -60,9 +60,9 @@ crsp_monthly[,Ranking_Ret := rollapplyr(shifted_log_ret, rollingWin, function(x)
   }else{
     return(sum(x, na.rm = TRUE))
   }
-}, fill=NA, align="right", partial = TRUE), PERMNO]
+}, fill=NA, align="right", partial = TRUE), by = PERMNO]
 
-crsp_monthly[!Valid13Prc | !ValidRet2 | is.na(lag_Mkt_Cap), Ranking_Ret := NA]
+crsp_monthly[!isAvailT_minus_13 | !isAvailT_minus_2 | is.na(lag_Mkt_Cap), Ranking_Ret := NA]
 
 crsp_monthly <- crsp_monthly[Ranking_Ret != "NA"]
 crsp_final <- crsp_monthly[,.(PERMNO, date, SHRCD, EXCHCD, DLRET, PRC, RET, SHROUT, Year, Month, Ret ,lag_Mkt_Cap, Ranking_Ret)]
