@@ -21,6 +21,11 @@ crsp_monthly[,Year:= year(date)]
 crsp_monthly[,Month:= month(date)]
 crsp_monthly[, YrMo := Year * 12 + Month]
 
+# limit data to that with full availability (as on French's website)
+crsp_monthly[, prev_YrMo := shift(YrMo), by = PERMNO]
+crsp_monthly[, valid_lag := YrMo == (prev_YrMo + 1)]
+crsp_monthly <- crsp_monthly[valid_lag == T]
+
 # Filter out missing ret and dlret data
 for(i in c('RET','DLRET')){
   crsp_monthly[,paste0(i) := as.character(get(i))]
@@ -55,6 +60,7 @@ rollingWin <- 11
 crsp_monthly[,c("isAvailT_minus_13","isAvailT_minus_2") := .(!is.na(shift(PRC,13)), !is.na(shifted_log_ret)), by = PERMNO]
 
 crsp_monthly[,Ranking_Ret := rollapplyr(shifted_log_ret, rollingWin, function(x){
+  # must have at least 8 returns in the 11 window
   if(sum(is.na(x)) >4){
     return(NA)
   }else{
@@ -65,7 +71,7 @@ crsp_monthly[,Ranking_Ret := rollapplyr(shifted_log_ret, rollingWin, function(x)
 crsp_monthly[!isAvailT_minus_13 | !isAvailT_minus_2 | is.na(lag_Mkt_Cap), Ranking_Ret := NA]
 
 crsp_monthly <- crsp_monthly[Ranking_Ret != "NA"]
-crsp_final <- crsp_monthly[,.(PERMNO, date, SHRCD, EXCHCD, DLRET, PRC, RET, SHROUT, Year, Month, Ret ,lag_Mkt_Cap, Ranking_Ret)]
+crsp_final <- crsp_monthly[,.(Year, Month, PERMNO, EXCHCD,lag_Mkt_Cap, Ret, Ranking_Ret)]
 
 # write cumulative return
 #write.table(crsp_final, file = "CRSP_Stocks_Momentum.csv", row.names=FALSE, sep=",")
