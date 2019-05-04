@@ -59,7 +59,8 @@ crsp_monthly <- crsp_monthly[!PERMNO %in% permnos_to_remove]
 rollingWin <- 11
 crsp_monthly[,c("isAvailT_minus_13","isAvailT_minus_2") := .(!is.na(shift(PRC,13)), !is.na(shifted_log_ret)), by = PERMNO]
 
-crsp_monthly[,Ranking_Ret := rollapplyr(shifted_log_ret, rollingWin, function(x){
+# calculate ranking return based on log return of the stocks
+crsp_monthly[,Ranking_Ret := rollapply(shifted_log_ret, rollingWin, function(x){
   # must have at least 8 returns in the 11 window
   if(sum(is.na(x)) >4){
     return(NA)
@@ -68,6 +69,7 @@ crsp_monthly[,Ranking_Ret := rollapplyr(shifted_log_ret, rollingWin, function(x)
   }
 }, fill=NA, align="right", partial = TRUE), by = PERMNO]
 
+# assign NAs to Ranking return based on data restriction 
 crsp_monthly[!isAvailT_minus_13 | !isAvailT_minus_2 | is.na(lag_Mkt_Cap), Ranking_Ret := NA]
 
 crsp_monthly <- crsp_monthly[Ranking_Ret != "NA"]
@@ -95,7 +97,7 @@ CRSP_Stocks_Momentum[,KF_decile := cut(Ranking_Ret, breaks=FFbreakpoints, labels
 # Extreme cumulative loss and gain is not captured by the Fama Decile,manually sort them into 1 and 10 decile
 CRSP_Stocks_Momentum[is.na(KF_decile) ,KF_decile := DM_decile]
 
-CRSP_Stocks_Momentum_final <- CRSP_Stocks_Momentum[,.(PERMNO, Year, Month, Ret, lag_Mkt_Cap,DM_decile,KF_decile)]
+CRSP_Stocks_Momentum_final <- CRSP_Stocks_Momentum[,.(PERMNO, Year, Month, Ret, lag_Mkt_Cap, DM_decile,KF_decile)]
 #write.table(CRSP_Stocks_Momentum_final, file = "CRSP_Stocks_Momentum_decile.csv", row.names=FALSE, sep=",")
 
 ######################## PS3 Qn 3 ################################################ 
