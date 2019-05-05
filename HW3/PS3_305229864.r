@@ -2,6 +2,7 @@ suppressMessages(require(data.table))
 suppressMessages(require(lubridate))
 suppressMessages(require(zoo))
 suppressMessages(require(moments))
+suppressMessages(require(ggplot2))
 
 rm(list=ls())
 # import CRPS data 1927 to 2018
@@ -63,7 +64,6 @@ PS3_Q1 <- function(crsp_monthly){
   rollingWin <- 11
   # calculate ranking return based on log return of the stocks
   crsp_monthly[,Ranking_Ret := rollapply(shifted_log_ret, rollingWin, function(x){
-    
     # must have at least 8 returns in the 11 window
     if(sum(is.na(x)) >4){
       return(NA)
@@ -293,14 +293,42 @@ rm(list=ls())
 
 # import CRSP momentum returns
 CRSP_Stocks_Momentum_returns <- as.data.table(read.csv("CRSP_Stocks_Momentum_returns.csv"))
+# import monthly value weight stock returns
+Monthly_CRSP_Stocks <- as.data.table(read.csv("Monthly_CRSP_Stocks.csv"))
+
+start <- 2009
+end <-2018
 
 # Illustrate WML return in the last 10 years 
-CRSP_Mom_10yr <- CRSP_Stocks_Momentum_returns[Year>2009]
+CRSP_Mom_10yr <- CRSP_Stocks_Momentum_returns[Year>start & Year <=end]
+vwretd <- Monthly_CRSP_Stocks[Year > start & Year <=end]$Stock_Vw_Ret
 
-DM_ExRet <- CRSP_Mom_10yr[decile ==10, DM_Ret] - CRSP_Mom_10yr[decile ==1, DM_Ret] - CRSP_Mom_10yr[decile ==1, Rf]
-KRF_ExRet <- CRSP_Mom_10yr[decile ==10, KRF_Ret] - CRSP_Mom_10yr[decile ==1, KRF_Ret] - CRSP_Mom_10yr[decile ==1, Rf]
+DM_Ret <- CRSP_Mom_10yr[decile ==10, DM_Ret] - CRSP_Mom_10yr[decile ==1, DM_Ret]
+KRF_Ret <- CRSP_Mom_10yr[decile ==10, KRF_Ret] - CRSP_Mom_10yr[decile ==1, KRF_Ret]
+DM_Winner <- CRSP_Mom_10yr[decile ==10, DM_Ret]
+KRF_Winner <- CRSP_Mom_10yr[decile ==10, KRF_Ret]
+DM_Loser <- CRSP_Mom_10yr[decile ==1, DM_Ret]
+KRF_Loser <- CRSP_Mom_10yr[decile ==1, KRF_Ret]
 
-DM_ExCumProd <- cumprod(DM_ExRet + 1)
-KRF_ExCumProd <- cumprod(KRF_ExRet + 1)
+dates <- unique(CRSP_Stocks_Momentum_returns[Year>start & Year <=end, .(Year,Month)])
+dates <- dates[, date := paste0(Year,"-",Month)]
+dates <- ymd(dates$date,truncated = 1)
 
+# get cumulative return 
+DM_CumProd <- cumprod(DM_Ret + 1)
+KRF_CumProd <- cumprod(KRF_Ret + 1)
+vwretd_CumProd <- cumprod(vwretd + 1)
+DM_WinnerCumProd <- cumprod(DM_Winner + 1)
+KRF_WinnerCumProd <- cumprod(KRF_Winner + 1)
+DM_LoserCumProd <- cumprod(DM_Loser + 1)
+KRF_LoserCumProd <- cumprod(KRF_Loser + 1)
+
+plot(ylab="Cumulative Return", ylim = c(0.8, 5), x =dates, y= DM_CumProd, type ="l", col ="red", main = "DM and KRF Momentum VS value-weighted Market Portfolio (2010-2018)")
+lines(x =dates, y= KRF_CumProd, col ="green")
+lines(x =dates, y= vwretd_CumProd, col ="gold")
+lines(x =dates, y= DM_WinnerCumProd, col="black")
+lines(x =dates, y= KRF_WinnerCumProd, col="purple")
+lines(x =dates, y= DM_LoserCumProd, col="pink")
+lines(x =dates, y= KRF_LoserCumProd, col="blue")
+legend("topleft",legend=c("DM WML","KRF WML", "Value-Weighted","DM Winner","KRF Winner","DM Loser","KRF Loser"),fill=c("red","green","gold","black","purple","pink","blue"), cex = 0.8)
 
