@@ -25,11 +25,6 @@ PS3_Q1 <- function(crsp_monthly){
   crsp_monthly[,Month:= month(date)]
   crsp_monthly[, YrMo := Year * 12 + Month]
   
-  # limit data to that with full availability (as on French's website)
-  # crsp_monthly[, prev_YrMo := shift(YrMo), by = PERMNO]
-  # crsp_monthly[, valid_lag := YrMo == (prev_YrMo + 1)]
-  # crsp_monthly <- crsp_monthly[valid_lag == T]
-  
   # Filter out missing ret and dlret data
   for(i in c('RET','DLRET')){
     crsp_monthly[,paste0(i) := as.character(get(i))]
@@ -226,6 +221,8 @@ for(i in 1:10){
 }
 
 #### correlation with KRF actual 
+#check data
+CRSP_Stocks_Momentum_returns[Year ==2015 & Month ==12]
 
 colnames(KRF_portfolio) <- c("date", 1:10)
 KRF_portfolio[, date := ymd(date, truncated = 1)]
@@ -253,20 +250,20 @@ colnames(KRF_portfolio) <- c("decile", "KRF_Ret_actual","Year", "Month")
 setkey(CRSP_Stocks_Momentum_returns, Year, Month, decile)
 setkey(KRF_portfolio, Year, Month, decile)
 # 
-# KRF_portfolio[, decile := as.integer()]
-# KRF_Ret_estimate <- CRSP_Stocks_Momentum_returns[!is.na(KRF_Ret),.(Year, Month, decile, KRF_Ret)]
-# KRF_Ret_Result <- merge(KRF_Ret_estimate, KRF_portfolio, by.x = c("Year", "Month","decile"), by.y = c("Year", "Month","decile"), all.x = T)
-# 
+KRF_portfolio[, decile := as.integer(decile)]
+KRF_Ret_estimate <- CRSP_Stocks_Momentum_returns[!is.na(KRF_Ret),.(Year, Month, decile, KRF_Ret, Rf)]
+KRF_Ret_Result <- merge(KRF_Ret_estimate, KRF_portfolio, by.x = c("Year", "Month","decile"), by.y = c("Year", "Month","decile"), all.x = T)
+KRF_Ret_Result[,KRF_Ret_actual := KRF_Ret_actual - Rf]
 # 
 # 
 # # start of the function
 # # correlation between KRF estimate and actual 
-# for(i in 1:10){
-#   KRF_Ret_estimate <- KRF_Ret_Result[decile==i, KRF_Ret]
-#   KRF_Actual <- KRF_Ret_Result[decile==i, KRF_Ret_actual]
-#   print(cor(KRF_Ret_estimate, KRF_Actual))
-# }
-# 
+for(i in 1:10){
+  KRF_Ret_estimate <- KRF_Ret_Result[decile==i, KRF_Ret]
+  KRF_Actual <- KRF_Ret_Result[decile==i, KRF_Ret_actual]
+  print(cor(KRF_Ret_estimate, KRF_Actual))
+}
+
 
 
 
