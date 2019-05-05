@@ -92,8 +92,8 @@ PS3_Q2 <- function(CRSP_Stocks_Momentum){
                                          labels=FALSE, include.lowest = TRUE), .(Year,Month)]
   
   # Fama decile
-  FFbreakpoints <- quantile(CRSP_Stocks_Momentum[EXCHCD==1,Ranking_Ret],probs=c(0:10)/10)
-  CRSP_Stocks_Momentum[,KF_decile := cut(Ranking_Ret, breaks=FFbreakpoints, labels=FALSE, include.lowest = T),.(Year,Month)]
+  CRSP_Stocks_Momentum[,KF_decile := cut(Ranking_Ret, breaks=quantile(.SD[EXCHCD==1,Ranking_Ret],probs=c(0:10)/10), 
+                                         labels=FALSE, include.lowest = T), .(Year,Month)]
   
   # Extreme cumulative loss and gain is not captured by the Fama Decile,manually sort them into 1 and 10 decile
   CRSP_Stocks_Momentum[is.na(KF_decile) ,KF_decile := DM_decile]
@@ -113,35 +113,38 @@ CRSP_Stocks_Momentum_decile <- as.data.table(read.csv("CRSP_Stocks_Momentum_deci
 # import Fama French
 FF_mkt <- as.data.table(read.csv("F-F_Research_Data_Factors.csv"))
 
+# convert date to date datatype
+FF_mkt[, X:= ymd(X, truncated = 1)]
+
+# change from percentage to decimal
+FF_mkt[, RF := RF/100]
+
+# add year month column
+FF_mkt[,Year:= year(X)]
+FF_mkt[,Month:= month(X)]
+
+# 1927 to 2018
+FF_mkt <- FF_mkt[Year>=1927 & Year<=2018]
+
 PS3_Q3 <- function(CRSP_Stocks_Momentum_decile, FF_mkt){
-  
-  # convert date to date datatype
-  FF_mkt[, X:= ymd(X, truncated = 1)]
-  
-  # change from percentage to decimal
-  FF_mkt[, RF := RF/100]
-  
-  # add year month column
-  FF_mkt[,Year:= year(X)]
-  FF_mkt[,Month:= month(X)]
   
   # get only year month and rf
   FF_mkt_rf <- FF_mkt[, .(Year, Month, RF)]
   
   # separete dm and fama french deciles
   DM_decile_data <- CRSP_Stocks_Momentum_decile[,.(PERMNO, Year, Month, Ret, lag_Mkt_Cap, DM_decile)]
-  FF_decile_data <- CRSP_Stocks_Momentum_decile[,.(PERMNO, Year, Month, Ret, lag_Mkt_Cap, KF_decile)]
+  KRF_decile_data <- CRSP_Stocks_Momentum_decile[,.(PERMNO, Year, Month, Ret, lag_Mkt_Cap, KF_decile)]
   
   # DM portfolio
   DM_portfolio <- DM_decile_data[,.(DM_Ret = sum(lag_Mkt_Cap * Ret, na.rm = T)/(sum(lag_Mkt_Cap,na.rm=T))), .(Year, Month, DM_decile)]
   setkey(DM_portfolio, Year, Month, DM_decile)
   
   # KF decile
-  FF_portfolio <- FF_decile_data[,.(KRF_Ret = sum(lag_Mkt_Cap * Ret, na.rm = T)/(sum(lag_Mkt_Cap,na.rm=T))), .(Year, Month, KF_decile)]
-  setkey(FF_portfolio, Year, Month, KF_decile)
+  KRF_portfolio <- KRF_decile_data[,.(KRF_Ret = sum(lag_Mkt_Cap * Ret, na.rm = T)/(sum(lag_Mkt_Cap,na.rm=T))), .(Year, Month, KF_decile)]
+  setkey(KRF_portfolio, Year, Month, KF_decile)
   
   # Merge the two portfolios together
-  merge_port <- merge(DM_portfolio, FF_portfolio, by.x = c("Year", "Month","DM_decile"), by.y = c("Year", "Month","KF_decile"), all.x = T)
+  merge_port <- merge(DM_portfolio, KRF_portfolio, by.x = c("Year", "Month","DM_decile"), by.y = c("Year", "Month","KF_decile"), all.x = T)
   merge_port <- merge(merge_port,FF_mkt_rf, by=c("Year", "Month"))
   colnames(merge_port) <- c("Year","Month","decile","DM_Ret","KRF_Ret","Rf")
   return(merge_port)
@@ -188,82 +191,89 @@ summary <- PS3_Q4(CRSP_Stocks_Momentum_returns)
 write.table(summary, file = "Qn4_summary.csv", row.names=FALSE, sep=",")
 ################################################################################################ 
 
-################################### PS3 Qn 5 ################################################
+####################################################### PS3 Qn 5 ################################################
 rm(list=ls())
 
 # import CRPS momentum returns
 CRSP_Stocks_Momentum_returns <- as.data.table(read.csv("CRSP_Stocks_Momentum_returns.csv"))
-#CRSP_Stocks_Momentum_returns[is.na(KRF_Ret), KRF_Ret := 0]
 
-# select 10 portflio momentum 
-KRF_portfolio <- as.data.table(read.csv("10_Portfolios_Prior_12_2.csv", header = T))
+############################## Parsing FF 10 portfolios momentum data 
+# select 10 portflio momentum
+KRF_returns <- as.data.table(read.csv("10_Portfolios_Prior_12_2.csv", header = T))
+colnames(KRF_returns) <- c("date", 1:10)
+KRF_returns[, date := ymd(date, truncated = 1)]
+
+# reshape the portfolio
+KRF_returns <- melt(KRF_returns, id=c("date"))
+setkey(KRF_returns, date)
+
+# set the year and month as integer
+KRF_returns[, Year:= year(date)]
+KRF_returns[, Month:= month(date)]
+
+# select year to end at dec 2018 12
+KRF_returns <- KRF_returns[Year<2019 & Year >1926]
+
+# change returnt o decimal
+KRF_returns[, value := value/100]
+KRF_returns[, date := NULL]
+colnames(KRF_returns) <- c("decile", "KRF_Ret_actual","Year", "Month")
+############################## End of parsing
 
 # initialize empty result matrix
 Qn5_result <- matrix(0, nrow=2,ncol=11)
 
-#### correlation with DM actual 
 # select m_m_pt_tot.txt monthly all firms total return 
-DM_portfolio <- as.data.table(read.csv("m_m_pt_tot.csv", header = FALSE))[,1:3]
-colnames(DM_portfolio) <- c("date", "decile","DM_Ret")
+DM_returns <- as.data.table(read.csv("m_m_pt_tot.csv", header = FALSE))[,1:3]
+colnames(DM_returns) <- c("date", "decile","DM_Ret")
 
 # set the year and month as integer
-DM_portfolio[,Year:= year(ymd(date))]
-DM_portfolio[,Month:= month(ymd(date))]
-DM_portfolio[, date := NULL]
+DM_returns[, Year:= year(ymd(date))]
+DM_returns[, Month:= month(ymd(date))]
+DM_returns[, date := NULL]
 
-
-# correlation between DM estimate and actual
-DM_2016 <- CRSP_Stocks_Momentum_returns[Year < 2017]
+################### correlation between DM estimate and actual 1927 to 2016
+DM_2016_estimate <- CRSP_Stocks_Momentum_returns[Year < 2017]
 for(i in 1:10){
-  DM_Ret_estimate <- DM_2016[decile==i]$DM_Ret
-  DM_Actual <- DM_portfolio[decile==i]$DM_Ret
+  DM_Ret_estimate <- DM_2016_estimate[decile==i, DM_Ret]
+  DM_Actual <- DM_returns[decile==i, DM_Ret]
   Qn5_result[1,i] <- cor(DM_Ret_estimate, DM_Actual)
 }
 
-#### correlation with KRF actual 
-#check data
-CRSP_Stocks_Momentum_returns[Year ==2015 & Month ==12]
+################### winner minus losers DM 
+winner_est <- DM_2016_estimate[decile ==10]
+loser_est <- DM_2016_estimate[decile ==1]
+wml_est <-  winner_est$DM_Ret - loser_est$DM_Ret
 
-colnames(KRF_portfolio) <- c("date", 1:10)
-KRF_portfolio[, date := ymd(date, truncated = 1)]
+winner_actual <- DM_returns[decile ==10]
+loser_actual <- DM_returns[decile ==1]
+wml_actual <- winner_actual$DM_Ret - loser_actual$DM_Ret
 
-# reshape the portfolio
-KRF_portfolio <- melt(KRF_portfolio, id=c("date"))
-setkey(KRF_portfolio, date)
-
-# set the year and month as integer
-KRF_portfolio[,Year:= year(date)]
-KRF_portfolio[,Month:= month(date)]
-
-# select year to end at dec 2018 12
-KRF_portfolio <- KRF_portfolio[Year<2019]
-
-# handle NAs in KRF
-#KRF_portfolio[is.na(KRF_Ret)]
-
-# change returnt o decimal
-KRF_portfolio[, value := value/100]
-KRF_portfolio[, date := NULL]
-colnames(KRF_portfolio) <- c("decile", "KRF_Ret_actual","Year", "Month")
+Qn5_result[1, 11] <- cor(wml_est, wml_actual)
 
 
+################### correlation between KRF estimate and actual 1927 to 2018
 setkey(CRSP_Stocks_Momentum_returns, Year, Month, decile)
-setkey(KRF_portfolio, Year, Month, decile)
-# 
-KRF_portfolio[, decile := as.integer(decile)]
-KRF_Ret_estimate <- CRSP_Stocks_Momentum_returns[!is.na(KRF_Ret),.(Year, Month, decile, KRF_Ret, Rf)]
-KRF_Ret_Result <- merge(KRF_Ret_estimate, KRF_portfolio, by.x = c("Year", "Month","decile"), by.y = c("Year", "Month","decile"), all.x = T)
-KRF_Ret_Result[,KRF_Ret_actual := KRF_Ret_actual - Rf]
-# 
-# 
-# # start of the function
-# # correlation between KRF estimate and actual 
+setkey(KRF_returns, Year, Month, decile)
+
+# start of the function
+# correlation between KRF estimate and actual 
 for(i in 1:10){
-  KRF_Ret_estimate <- KRF_Ret_Result[decile==i, KRF_Ret]
-  KRF_Actual <- KRF_Ret_Result[decile==i, KRF_Ret_actual]
-  print(cor(KRF_Ret_estimate, KRF_Actual))
+  KRF_Ret_estimate <- CRSP_Stocks_Momentum_returns[decile==i, KRF_Ret]
+  KRF_Actual <- KRF_returns[decile==i, KRF_Ret_actual]
+  Qn5_result[2,i] <-cor(KRF_Ret_estimate, KRF_Actual)
 }
 
+################### winner minus losers KRF 
+winner_est <- CRSP_Stocks_Momentum_returns[decile ==10]
+loser_est <- CRSP_Stocks_Momentum_returns[decile ==1]
+wml_est <-  winner_est$KRF_Ret - loser_est$KRF_Ret
+
+winner_actual <- KRF_returns[decile ==10]
+loser_actual <- KRF_returns[decile ==1]
+wml_actual <- winner_actual$KRF_Ret - loser_actual$KRF_Ret
+
+Qn5_result[2, 11] <- cor(wml_est, wml_actual)
 
 
 
