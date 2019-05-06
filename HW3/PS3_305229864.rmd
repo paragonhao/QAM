@@ -1,0 +1,319 @@
+---
+header-includes:
+- \usepackage{amssymb, amsmath, amsthm}
+- \usepackage{tabu}
+- \newcommand{\E}{\mathbb{E}}
+- \newcommand{\var}{{\rm Var}}
+- \newcommand{\N}{\mathcal{N}}
+output: pdf_document
+---
+  
+\noindent \begin{tabu} to \textwidth {@{}X[4 l] @{}X[r]}
+\textbf{Problem Set 1}           & \\ 
+\textbf{MFE 431: Quantitative Asset Management}   & \\ 
+\textbf{Professor: Bernard Herskovic}         & \\
+\textbf{Student: Xiahao Wang}         & \\
+\textbf{Name of whom I discussed this problem set with: Sumeng Wang, Mu Lin, Yanxiang Zhao}
+\end{tabu}
+
+
+## Question 1 Using CRSP stock data, define the universe of monthly returns that can be used in calculating momentum portfolios, as well as their ranking return, following the procedure in Daniel and Moskowitz (2016) 1. Your output should be from 1927-2018.
+
+
+
+\textbf{Summary:}
+
+The resulting dataset:
+
+```{r echo=FALSE}
+suppressMessages(library(data.table))
+CRSP_Stocks_Momentum <- as.data.table(read.csv("CRSP_Stocks_Momentum.csv"))
+CRSP_Stocks_Momentum
+```
+
+
+
+1. \textbf{Universe of stocks: } 
+
+Following the momentum crash paper, I restrict the sample to common shares( share code 10 and 11) and to securities traded in the New York Stock Exchange, American Stock Exchange, or the Nasdaq Stock Exchange (exchange codes 1, 2, and 3)
+
+Scope: Dataset from CRSP Monthly from 1925 Dec to 2018 Dec
+
+Since we would like to find out the momentum from 1927 to 2018, we need to download the dataset starting from 1925 Dec to be able to get the momentum data on 1927 January. 
+
+Then set standard format of “date” and extract “Year” and “Month” column.
+
+2. \textbf{Handle missing data in Delisting Return (DLRET), and Return (RET):}
+
+The missing data in RET are denoted by 'A','C','P','S','T','B','C',
+The missing data in DLRET are denoted by -66, -77, -88, -99
+Replace these missing data with NA. 
+
+
+
+3. \textbf{Delisting return calculation:}
+
+To calculate the cum-dividend return (Ret), let RET be cum-dividend return if DLRET is missing. 
+If DLRET is not missing and RET is missing, let DLRET be just cum-dividend return.
+If both are not missing, use the formula from lecture notes:  Ret = (1 + DLRET)(1 + RET) - 1  to get the cum-dividend return.
+
+
+
+4. \textbf{Market Capitalisation calculation: }
+There are some price that are negative, I take the absolute value for both price and shares outstanding and multiply them together to get the market capitalisation. Also I shift the market cap by 1 period for each firm to get the lagged market cap. 
+
+
+
+5. \textbf{Ranking Return calculation: }
+
+Following the paper, the momentum (or Ranking Return) is calculated based on the cumulative log return from t-12 to t-2, which is 11 month in total. With t-1 as a gap, we need a total of 13 months to have Ranking Return standing at time t. 
+
+
+Step 1: Get log return 
+
+  + Log Return calculation formula: log(1 + Ret)
+  
+  + Shift by 2 period to get t-2 Return at time t 
+
+
+Step 2: Remove the stock (by PERMNO) that has less than 13 month of return. Use the `aggregate` function to conveniently identify the PERMNOs that have less than 13 months of data and remove these stocks from the dataset.
+
+
+Step 3: Data restriction listed out on the paper and as well as the hints in *Notes on the Daniel-Moskowitz Momentum Portfolios*
+
+  + In the eleven month window for each momentum data point calculation, there must be at least 8 months that have return data, otherwise assign NA to Ranking Return
+  
+  + Check if price at t-13 is available, otherwise assign NA to Ranking Return
+  
+  + Check if return at t-2 is available, otherwise assign NA to Ranking Return
+  
+  + Check if lagged market cap is available, otherwise assign NA to Ranking Return
+
+Use `rollapply` function to sum up the log return at a 11-month window to get the cumulative log return.
+
+
+Step 4: Remove the rows with Ranking Return equal to NA
+
+
+
+
+## Question 2 Define the monthly momentum portfolio decile of each stock as defined by both Daniel and Moskowitz (2016) and Kenneth R. French. Your output should be from 1927-2018.
+
+\textbf{Summary:}
+
+The resulting dataset:
+
+```{r echo=FALSE}
+CRSP_Stocks_Momentum_decile <- as.data.table(read.csv("CRSP_Stocks_Momentum_decile.csv"))
+CRSP_Stocks_Momentum_decile
+```
+
+\textbf{Datasource:}
+  
+  + output of Qn 1, which is the CRSP stock data with Ranking Return from 1927 to 2018 
+
+
+
+\textbf{Decile Scope: }
+
+Create `DM_decile` and `KRF_decile`, both are deciles from 1 to 10. 
+
+
+
+\textbf{Decile Sorting: }
+
+From the paper and hints, the following rules are applied:
+
+  + For Daniel and Moskowitz (DM): cut the data based on the Ranking Return obtained from Qn1 entirely for each period (including New York Stock Exchange, American Stock Exchange, or the Nasdaq Stock Exchange)
+  
+  + For Kenneth R. French (KRF): cut the data based on the Ranking Return obtained from Qn1 from New York Stock Exchange only
+  
+In this case, we obtained NAs from KRF decile as some extreme values are not captured. All of the NAs are in either 1 or 10 of DM deciles, so we assign 1 or 10 to the NAs accordingly.
+
+
+
+
+## Question 3 Calculate the monthly momentum portfolio decile returns as defined by both Daniel and Moskowitz (2016) and Kenneth R. French. Your output should be from 1927-2018.
+
+\textbf{Datasource:}
+  
+  + output of Qn 2, which is the stock returns sorted by DM and KRF deciles from 1927 to 2018
+
+
+
+\textbf{Summary:}
+
+The resulting dataset:
+
+```{r echo=FALSE}
+CRSP_Stocks_Momentum_returns <- as.data.table(read.csv("CRSP_Stocks_Momentum_returns.csv"))
+CRSP_Stocks_Momentum_returns
+```
+
+\textbf{Data cleaning:}
+Datasource: 
+
+1. "F-F Research Data Factors" (From 1927 to 2018) from its website, clean the data by setting “date” in
+appropriate format and extract “year” and “month”. Divide Risk free variable by 100 the number in the dataset is in percentage numbers. Then set standard format of “date” and extract “year” and “month” column.
+
+2. Output of Qn 2: Momentum returns
+
+\textbf{Calculation of monthly portfolio:}
+
+Step 1: Calcualte the DM and KRF monthly return separately. Separate the Momentum returns into two datatables with DM and KRF deciles.
+
+Step 2: Calculate the monthly value-weighted portfolios using for DM and KRF deciles accordingly. Use `weighted.mean()` funciton with return and lagged market cap as parameters to calcualted value-weighted portfolios. 
+
+Step 3: Merge back the two data tables with the following parameters: 
+  
+  + In DM Portfolio dataset: "Year","Month", "DM_decile"
+  
+  + In KRF Portfolio dataset: "Year","Month", "KRF_decile"
+  
+
+
+
+## Question 4. Replicate Table 1 in Daniel and Moskowitz (2016), except for $\alpha$, t($\alpha$), $\beta$, and sk(d) rows, and the Market column. Match the format and methodology to the extent possible.
+
+\textbf{Datasource:}
+  
+  + output of Qn 3, which is the value weighted return across years sorted by DM and KRF deciles from 1927 to 2018
+  
+  
+  
+\textbf{Summary:}
+
+The resulting dataset is shown in Table 1:
+
+```{r echo=FALSE}
+suppressMessages(library(knitr))
+suppressWarnings(library(kableExtra))
+suppressMessages(library(lubridate))
+summary <- as.data.table(read.csv("Qn4_summary.csv"))
+title <- c("Excess Mean Return","Volatility","SR","SK(m)")
+summary <- cbind(Return_Statistics = title,summary)
+kable(summary, "latex", booktabs =T, caption = "Momentum decile portfolios", align ="l") %>% kable_styling(latex_options = c("striped", "scale_down")) %>% add_header_above(c(" ", "Momentum decile Portfolios" = 11)) 
+```
+
+
+
+\textbf{Calculation of stats:}
+
+  + Excess Mean Return:Compute portfolio excess return by subtracting Fama Fench risk-free rate from “DM_ret” and
+“KRF_ret”, respectively. And compute the portfolio mean return as  arithmetic mean across years for each decile and annualize it by multiplying by 12
+
+  + Volatility: Compute portfolio stabdard deviation as the sample standard deviation across years for each decile and annualize it by multiplying by square root of 12. 
+  
+  + Sharp Ratio: Compute the sharp ratio using the following formula: Sharp ratio = sample mean / sample standard deviation
+  
+  + Skewness: Compute the skewness of the log return using the following formula: skewness(log(1 + DM Return)), where skewness is the function from library moments to calculate the skewness. 
+  
+  
+  
+\textbf{Calculation of WML:}
+WML refers to winner minus loser portfolio, it is a portfolio formed by using winner portfolio (decile 10) minus loser portfolio (decile 1) per period. Compute the key stats using the same method as defined above.
+
+For skewness of WML: Using the formula: log(1 + WML return + risk free)
+
+
+
+
+## Question 5.  Calculate the correlation of your portfolio returns with the Daniel and Moskowitz (2016) breakpoints (by decile), to the portfolio returns on Daniel's website. Also calculate the correlation of your portfolio returns with the Kenneth R. French breakpoints (by decile), to the portfolio returns on French's website. Round to 4 decimal places. Correlations should be calculated from 1927-2018.
+  
+  
+  
+\textbf{Datasource:}
+
+  + output of Qn 3 (CRSP momentum returns), which is the value weighted return across years sorted by DM and KRF deciles from 1927 to 2018
+  + DM returns from Daniel's website. In this case, we use *m_m_pt_tot* which is defined as the monthly all firm total return
+  + KRF returns from KRF's website. Download *10 Portfolios Formed on Momentum*, use the value weighted return which is the first set of data in the csv from 1927 to 2018
+  
+\textbf{Data cleaning:} 
+
+  + Latest DM returns has only data up until 2016 Dec. So when calcuating the correlation for DM portfolio, we could only use data from 1927 to 2016. But for KRF, we can calculate the correlation using data from 1927 to 2018.
+
+  + As the format of the KRF returns is different from the CRSP momentum returns, we need to first convert the format of the data. `melt` is a good function to convert KRF returns to the matching data format.
+  
+  + Then set standard format of “date” and extract “year” and “month” column for both DM and KRF returns
+   
+   
+   
+\textbf{Correlation (rounding to 4 decimals) in table 2:}
+
+```{r echo=FALSE}
+correlation <- as.data.table(read.csv("Qn5_summary.csv"))
+title <- c("DM Correlation","KRF Correlation")
+correlation <- cbind(Correlation = title,correlation)
+kable(correlation, "latex", booktabs =T, caption = "Correlation between replicated DM and KRF portfolio with actual ones", align ="l") %>% kable_styling(latex_options = c("striped", "scale_down"))
+```
+
+
+
+
+## Question 6.  Has the momentum anomaly worked in the past few years? Show some empirical evidence.
+
+The following chart illustrates the performance of the momentum strategy (WML), a break down of winner and loser deciles and also a comparision with market value-weighted portfolio.
+
+```{r echo=FALSE}
+
+# import CRSP momentum returns
+CRSP_Stocks_Momentum_returns <- as.data.table(read.csv("CRSP_Stocks_Momentum_returns.csv"))
+# import monthly value weight stock returns
+Monthly_CRSP_Stocks <- as.data.table(read.csv("Monthly_CRSP_Stocks.csv"))
+
+start <- 2009
+end <-2018
+
+# Illustrate WML return in the last 10 years 
+CRSP_Mom_10yr <- CRSP_Stocks_Momentum_returns[Year>start & Year <=end]
+vwretd <- Monthly_CRSP_Stocks[Year > start & Year <=end]$Stock_Vw_Ret
+
+DM_Ret <- CRSP_Mom_10yr[decile ==10, DM_Ret] - CRSP_Mom_10yr[decile ==1, DM_Ret]
+KRF_Ret <- CRSP_Mom_10yr[decile ==10, KRF_Ret] - CRSP_Mom_10yr[decile ==1, KRF_Ret]
+DM_Winner <- CRSP_Mom_10yr[decile ==10, DM_Ret]
+KRF_Winner <- CRSP_Mom_10yr[decile ==10, KRF_Ret]
+DM_Loser <- CRSP_Mom_10yr[decile ==1, DM_Ret]
+KRF_Loser <- CRSP_Mom_10yr[decile ==1, KRF_Ret]
+
+dates <- unique(CRSP_Stocks_Momentum_returns[Year>start & Year <=end, .(Year,Month)])
+dates <- dates[, date := paste0(Year,"-",Month)]
+dates <- ymd(dates$date,truncated = 1)
+
+# get cumulative return 
+DM_CumProd <- cumprod(DM_Ret + 1)
+KRF_CumProd <- cumprod(KRF_Ret + 1)
+vwretd_CumProd <- cumprod(vwretd + 1)
+DM_WinnerCumProd <- cumprod(DM_Winner + 1)
+KRF_WinnerCumProd <- cumprod(KRF_Winner + 1)
+DM_LoserCumProd <- cumprod(DM_Loser + 1)
+KRF_LoserCumProd <- cumprod(KRF_Loser + 1)
+
+plot(ylab="Cumulative Return", ylim = c(0.8, 5), x =dates, y= DM_CumProd, type ="l", col ="red", main = "DM and KRF Momentum VS value-weighted Market Portfolio (2010-2018)")
+lines(x =dates, y= KRF_CumProd, col ="green")
+lines(x =dates, y= vwretd_CumProd, col ="gold")
+lines(x =dates, y= DM_WinnerCumProd, col="black")
+lines(x =dates, y= KRF_WinnerCumProd, col="purple")
+lines(x =dates, y= DM_LoserCumProd, col="pink")
+lines(x =dates, y= KRF_LoserCumProd, col="blue")
+legend("topleft",legend=c("DM WML","KRF WML", "Value-Weighted","DM Winner","KRF Winner","DM Loser","KRF Loser"),fill=c("red","green","gold","black","purple","pink","blue"), cex = 0.8)
+
+```
+
+
+As we have observed, both the DM and KRF momentum strategies underperformed the market from 2010 to 2018. The loser portfolio actually achieved quite significant postive return from 2012 to 2015 and after 2016.
+
+This piece of empirical evidence shows that momentum strategy alone is clearly not a winning strategy that can be used to outperform the market.
+
+
+
+## Question 7.  Would you implement this trading strategy if you were running your own fund? What are the main implementation challenges to consider?
+
+Clearly I would not implement the strategy as it has consistently unperformed the market in the last 10 years. My investors would be better off buying index ETF than investing in my own fund.
+
+Also, apart from looking at the return, we might also need to consider the turnover ratio since the portfolio are rebalanced monthly and stocks may be picked, dropped and picked up again. There might be high transaction cost involved in the monthly rebalancing that might eat up the profits of this strategy.
+
+
+
+
+
+

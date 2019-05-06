@@ -24,7 +24,6 @@ PS3_Q1 <- function(crsp_monthly){
   # set the year and month as integer
   crsp_monthly[,Year:= year(date)]
   crsp_monthly[,Month:= month(date)]
-  crsp_monthly[, YrMo := Year * 12 + Month]
   
   # Filter out missing ret and dlret data
   for(i in c('RET','DLRET')){
@@ -182,17 +181,17 @@ PS3_Q4 <- function(merge_port){
   # winner minus losers
   winner <- merge_port[decile ==10,]
   loser <- merge_port[decile ==1,]
-  
   wml <-  winner$DM_Ret - loser$DM_Ret
   
   summary[1, 11] <- mean(wml)*12 * 100
   summary[2, 11] <- sd(wml) * sqrt(12) * 100
   summary[3, 11] <- summary[1, 11]/summary[2, 11]
   summary[4, 11] <- skewness(log(1 + wml + merge_port[decile ==1, Rf ]))
+  
   return(summary)
 }
 
-summary <- PS3_Q4(CRSP_Stocks_Momentum_returns)
+summary <- round(PS3_Q4(CRSP_Stocks_Momentum_returns),2)
 write.table(summary, file = "Qn4_summary.csv", row.names=FALSE, sep=",")
 ################################################################################################ 
 
@@ -282,7 +281,7 @@ PS3_Q5 <- function(CRSP_Stocks_Momentum_returns, DM_returns){
   Qn5_result[2, 11] <- cor(wml_est, wml_actual)
   return(Qn5_result)
 }
-Qn5_result <- PS3_Q5(CRSP_Stocks_Momentum_returns, DM_returns)
+Qn5_result <- round(PS3_Q5(CRSP_Stocks_Momentum_returns, DM_returns),4)
 colnames(Qn5_result) <- c(paste0("Decile ",1:10), "WML")
 rownames(Qn5_result) <- c("DM correlation", "KRF correlation")
 write.table(Qn5_result, file = "Qn5_summary.csv", row.names=FALSE, sep=",")
