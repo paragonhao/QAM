@@ -264,6 +264,7 @@ setkey(Size_Rank,PERMCO,PERMNO,Year,Month)
 six_portfolios <- merge(Size_Rank,BEME_Rank)
 
 # SMB and HML are all equal weighted 
+#SMB_HML<- six_portfolios[,.(Ret = weighted.mean(Ret.x, lagged_MktCap.x, na.rm = T)),.(Year,Month, HML,SB)]
 SMB_HML<- six_portfolios[,.(Ret = weighted.mean(Ret.x, lagged_MktCap.x, na.rm = T)),.(Year,Month, HML,SB)]
 SMB_HML <- SMB_HML[Year>1972]
 setkey(SMB_HML, Year,Month)
@@ -271,7 +272,7 @@ setkey(SMB_HML, Year,Month)
 # SMB is defined as (SL + SM + SH)/3 - (BL + BM + BH)/3
 # HMLis defined as (SH + BH)/2 - (SL + BH)/2
 SMB <- SMB_HML[,.(SMB_Ret = (.SD[SB=="S" & HML=="L",Ret] + .SD[SB=="S" & HML=="M",Ret]+ .SD[SB=="S" & HML=="H",Ret] - .SD[SB=="B" & HML=="L",Ret] - .SD[SB=="B" & HML=="M",Ret] - .SD[SB=="B" & HML=="H",Ret])/3), by =.(Year, Month)]
-HML <- SMB_HML[, .(HML_Ret =(.SD[SB=="S" & HML=="H",Ret] + .SD[SB=="B" & HML=="H",Ret] - .SD[SB=="S" & HML=="L",Ret] - .SD[SB=="B" & HML=="H",Ret])/2), by =.(Year, Month)]
+HML <- SMB_HML[, .(HML_Ret =(.SD[SB=="S" & HML=="H",Ret] + .SD[SB=="B" & HML=="H",Ret] -.SD[SB=="S" & HML=="L",Ret] - .SD[SB=="B" & HML=="L",Ret])/2), by =.(Year, Month)]
 
 ################################################################################################
 
