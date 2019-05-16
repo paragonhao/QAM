@@ -117,10 +117,12 @@ Non_FS_PERMCO <- unique(gv_merged_in_range$LPERMCO)
 #####################################################################################
 
 ################################ Merge CRSP and Compustat together ############################################### 
+
 finaldata <- crsp_monthly %>%
   left_join(gv_merged_in_range,by =c("PERMNO"="LPERMNO","Year"="fyear"))%>%
   select(PERMNO,date,PERMCO,EXCHCD,Ret,MktCap,BE,at)%>%
   filter(complete.cases(.)) %>% as.data.table
+
 #####################################################################################
 
 ########################## Find the size portfolio return #####################################
@@ -138,7 +140,6 @@ crsp_monthly_cleaned <- finaldata
 
 # get rid of Financial PERMCO
 crsp_monthly_cleaned <- crsp_monthly_cleaned[PERMCO %in% Non_FS_PERMCO]
-
 
 # PERMCO is a unique permanent identifier assigned by CRSP to all companies with issues on a CRSP file. 
 # This number is permanent for all securities issued by this company regardless of name changes.
@@ -177,16 +178,9 @@ size_portfolio <- size_portfolio[Year>1972]
 
 write.table(size_portfolio, file = "size_portfolio.csv", row.names=FALSE, sep=",")
 write.table(crsp_size_merged, file ="size_10Deciles.csv", row.names=FALSE, sep=",")
-# save the crsp_monthly_cleaned again as the financial firms have been filtered out already 
-# and the aggregated sum for each firm has been calculated
-write.table(crsp_monthly_cleaned, file = "crsp_monthly_cleaned.csv", row.names=FALSE, sep=",")
 #####################################################################################
 
 #################################### Find the BE/MEB portfolio ####################################
-#rm(list=ls())
-# import clean up data 
-#crsp_monthly_cleaned <- as.data.table(read.csv("crsp_monthly_cleaned.csv"))
-#gv_merged_compustat <- as.data.table(read.csv("gv_merged_compustat.csv"))
 historical_BE_raw_data <- as.data.table(read.csv("DFF_BE_With_Nonindust.csv", header = F)) # from Fama French website
 
 BE_data <- finaldata[Month == 12,]
@@ -244,6 +238,7 @@ write.table(BEME_portfolio, file = "BEME_portfolio.csv", row.names=FALSE, sep=",
 #####################################################################################
 
 #################################### Find the SMB portfolio ####################################
+rm(list=ls())
 #Note: The B/M breakpoints for a region are the 30th and 70th percentiles of B/M for the big stocks of the region.
 BEME_10Deciles<- as.data.table(read.csv("BEME_10Deciles.csv"))
 
@@ -261,11 +256,10 @@ setkey(BEME_Rank,PERMCO,PERMNO,Year,Month)
 setkey(Size_Rank,PERMCO,PERMNO,Year,Month)
 
 # Merge the two 
-six_portfolios <- merge(Size_Rank,BEME_Rank)
+sizeBEME_portfolios <- merge(Size_Rank,BEME_Rank)
 
 # SMB and HML are all equal weighted 
-#SMB_HML<- six_portfolios[,.(Ret = weighted.mean(Ret.x, lagged_MktCap.x, na.rm = T)),.(Year,Month, HML,SB)]
-SMB_HML<- six_portfolios[,.(Ret = weighted.mean(Ret.x, lagged_MktCap.x, na.rm = T)),.(Year,Month, HML,SB)]
+SMB_HML<- sizeBEME_portfolios[,.(Ret = weighted.mean(Ret.x, lagged_MktCap.x, na.rm = T)),.(Year,Month, HML,SB)]
 SMB_HML <- SMB_HML[Year>1972]
 setkey(SMB_HML, Year,Month)
 
@@ -276,8 +270,19 @@ HML <- SMB_HML[, .(HML_Ret =(.SD[SB=="S" & HML=="H",Ret] + .SD[SB=="B" & HML=="H
 
 ################################################################################################
 
-####################################### output stats ME & Long short portfolio #############################################
+#################################### Summarize the result  ###########################################
 size_portfolio <-  as.data.table(read.csv("size_portfolio.csv"))
+BEME_portfolio <-  as.data.table(read.csv("BEME_portfolio.csv"))
+Q1_summary <- merge(size_portfolio, BEME_portfolio, by.x = c("Year", "Month", "size_Rank"), by.y = c("Year", "Month", "BEME_Rank"))
+Q1_summary<- merge(Q1_summary,HML)
+Q1_summary<- merge(Q1_summary,SMB)
+setnames(Q1_summary, "size_Rank","port")
+write.table(Q1_summary, file = "Q1_summary.csv", row.names=FALSE, sep=",")
+#####################################################################################
+
+# Qn 2
+
+####################################### output stats ME & Long short portfolio #############################################
 FF_Factors<- as.data.table(read.csv("F-F_Research_Data_Factors.csv"))
 size_FF_portfolio<- as.data.table(read.csv("Portfolios_Formed_on_ME.csv"))
 
@@ -320,8 +325,8 @@ ME_mat[3,11] <- ME_mat[1,11]/ME_mat[2,11]
 ME_mat[4,11] <- skewness(WML_ME)
 ME_mat[5,11] <- cor(WML_ME, (size_FF_portfolios_merged[Size_rank==1,Ret] - size_FF_portfolios_merged[Size_rank==10,Ret]))
 
+write.table(ME_mat, file = "ME_Matrix.csv", row.names=FALSE, sep=",")
 ####################################### output stats BEME & Long short portfolio #############################################
-BEME_portfolio <-  as.data.table(read.csv("BEME_portfolio.csv"))
 BEME_FF_Portfolio <- as.data.table(read.csv("Portfolios_Formed_on_BE-ME.csv"))
 BEME_FF_Portfolio[,date:= ymd(X, truncated = 1)]
 
@@ -357,6 +362,7 @@ BEME_mat[3,11] <- BEME_mat[1,11]/BEME_mat[2,11]
 BEME_mat[4,11] <- skewness(WML_BEME)
 BEME_mat[5,11] <- cor(WML_BEME, (BEME_FF_Portfolio_merged[BEME_rank==1,Ret] - BEME_FF_Portfolio_merged[BEME_rank==10,Ret]))
 
+write.table(BEME_mat, file = "BEME_Matrix.csv", row.names=FALSE, sep=",")
 ####################################### output stats SMB portfolio #############################################
 
 setkey(SMB,Year,Month)
@@ -371,6 +377,7 @@ SMB_mat[3,1] <- SMB_mat[1,1]/SMB_mat[2,1]
 SMB_mat[4,1] <- skewness(SMB$SMB_Ret)
 SMB_mat[5,1] <- cor(SMB$SMB_Ret, FF_Factors$SMB)
 
+write.table(SMB_mat, file = "SMB_Matrix.csv", row.names=FALSE, sep=",")
 ####################################### output stats HML portfolio #############################################
 
 setkey(HML,Year,Month)
@@ -385,3 +392,4 @@ HML_mat[3,1] <- HML_mat[1,1]/HML_mat[2,1]
 HML_mat[4,1] <- skewness(HML$HML_Ret)
 HML_mat[5,1] <- cor(HML$HML_Ret, FF_Factors$HML)
 
+write.table(HML_mat, file = "HML_Matrix.csv", row.names=FALSE, sep=",")
