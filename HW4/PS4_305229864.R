@@ -176,7 +176,7 @@ setkey(size_portfolio, Year, Month, size_Rank)
 size_portfolio <- size_portfolio[Year>1972]
 
 write.table(size_portfolio, file = "size_portfolio.csv", row.names=FALSE, sep=",")
-#write.table(crsp_size_merged, file ="size_10Deciles.csv", row.names=FALSE, sep=",")
+write.table(crsp_size_merged, file ="size_10Deciles.csv", row.names=FALSE, sep=",")
 # save the crsp_monthly_cleaned again as the financial firms have been filtered out already 
 # and the aggregated sum for each firm has been calculated
 write.table(crsp_monthly_cleaned, file = "crsp_monthly_cleaned.csv", row.names=FALSE, sep=",")
@@ -189,12 +189,7 @@ write.table(crsp_monthly_cleaned, file = "crsp_monthly_cleaned.csv", row.names=F
 #gv_merged_compustat <- as.data.table(read.csv("gv_merged_compustat.csv"))
 historical_BE_raw_data <- as.data.table(read.csv("DFF_BE_With_Nonindust.csv", header = F)) # from Fama French website
 
-gv_merged_in_range <- gv_merged_in_range[, .(BE, fyear, LPERMCO, LPERMNO, at)]
-crsp_mergedBy_DEC <- crsp_monthly_cleaned[Month == 12, .(PERMCO, PERMNO, Year, MktCap, EXCHCD)]
-
-#Use fyear to merge crsp and compustat
-crsp_compustat_merged <- merge(crsp_mergedBy_DEC, gv_merged_in_range,by.x=c('PERMCO','Year','PERMNO'),by.y=c('LPERMNO', 'LPERMCO','fyear'), all.x = T)
-setkey(crsp_compustat_merged, Year)
+BE_data <- finaldata[Month == 12,]
 
 # handle historical BE 
 historical_BE <- historical_BE_raw_data[,c(-2,-3)]
@@ -205,39 +200,31 @@ historical_BE[, variable :=NULL]
 historical_BE <- historical_BE[value != -99.99 & Year >= 1970]
 
 # merge with crsp and compustat
-crsp_compustat_BE_merged <- merge(crsp_compustat_merged, historical_BE,by.x = c("PERMNO","Year"),by.y=c("PERMNO","Year"),all.x=T)
+crsp_compustat_BE_merged <- merge(BE_data, historical_BE,by.x = c("PERMNO","Year"),by.y=c("PERMNO","Year"),all.x=T)
 crsp_compustat_BE_merged[is.na(BE) & !is.na(value), BE := value]
 
 # clean up crps and compustat merged data
 # if total asset is NA, assign BE to be NA as well, is BE is 0, assign BE to be NA
-crsp_compustat_BE_merged[BE == 0 | (is.na(at)),BE:=NA]
-crsp_compustat_BE_merged <- crsp_compustat_BE_merged[,c(-7)]
+crsp_compustat_BE_merged[BE == 0 | (is.na(at)), BE:=NA]
+crsp_compustat_BE_merged[,value := NULL]
 crsp_compustat_BE_merged[,BEME := BE/MktCap]
 
 # get rid of NAs for sorting later
 crsp_compustat_BE_merged <- crsp_compustat_BE_merged[!is.na(BEME) & BEME>=0]
 
-# take quantiles of all data 
-crsp_compustat_BE_merged[,BEME_decile_all_stock := cut(BEME, breaks=quantile(BEME, probs=c(0:10)/10), 
-                                                       labels=FALSE, include.lowest = T), .(Year)]
-
+# sorting into deciles
 # NYSE stocks are used as breakpoints for all the stocks in NYSE AMEX and NASDAQ
-crsp_compustat_BE_merged[,BEME_decile := cut(BEME, breaks=quantile(.SD[EXCHCD==1,BEME],probs=c(0:10)/10), 
-                                       labels=FALSE, include.lowest = T), .(Year)]
-
-# Extreme cumulative loss and gain is not captured by the NYSE Decile,manually sort them into 1 and 10 decile
-crsp_compustat_BE_merged[is.na(BEME_decile) ,BEME_decile := BEME_decile_all_stock]
-crsp_compustat_BE_merged[, BEME_decile_all_stock := NULL]
+crsp_compustat_BE_merged[,BEME_decile := findInterval(BEME, quantile(.SD[EXCHCD==1,BEME], seq(0.1,0.9,0.1)), left.open = T) + 1,by = .(Year, Month)]
 
 # shift ranking forward by a year
-crsp_compustat_BE_merged[,lagged_BEME_decile := shift(BEME_decile),by=PERMCO]
+crsp_compustat_BE_merged[,lagged_BEME_decile := shift(BEME_decile), by=PERMNO]
 
-setorder(crsp_monthly_cleaned, Year, Month)
+setorder(finaldata, Year, Month)
 setorder(crsp_compustat_BE_merged, Year)
 
 # MERGE the BEME decile information back to crsp cleaned up data.
-crsp_compustat_BE_final <- crsp_compustat_BE_merged[, .(PERMCO, Year, BEME_decile, lagged_BEME_decile)]
-crsp_BE_decile_merged <- merge(crsp_monthly_cleaned, crsp_compustat_BE_final, by = c("PERMCO","Year"), all.x = T)
+crsp_compustat_BE_final <- crsp_compustat_BE_merged[, .(PERMNO,PERMCO, Year, BEME_decile, lagged_BEME_decile)]
+crsp_BE_decile_merged <- merge(finaldata, crsp_compustat_BE_final, by = c("PERMNO","PERMCO","Year"), all.x = T)
 
 # shift from t to june of t+1
 crsp_BE_decile_merged[,c("BEME_Rank","lagged_MktCap") := .(shift(lagged_BEME_decile, 6), shift(MktCap, 1)), .(PERMNO)]
@@ -257,8 +244,6 @@ write.table(BEME_portfolio, file = "BEME_portfolio.csv", row.names=FALSE, sep=",
 #####################################################################################
 
 #################################### Find the SMB portfolio ####################################
-rm(list=ls())
-
 #Note: The B/M breakpoints for a region are the 30th and 70th percentiles of B/M for the big stocks of the region.
 BEME_10Deciles<- as.data.table(read.csv("BEME_10Deciles.csv"))
 
@@ -271,6 +256,7 @@ BEME_10Deciles[,HML:=ifelse(BEME_Rank<4,"L",ifelse(BEME_Rank<8,"M","H"))]
 
 BEME_Rank <- BEME_10Deciles[,.(PERMNO, PERMCO, Year, Month, Ret, HML,lagged_MktCap)]
 Size_Rank <- size_10Deciles[,.(PERMNO, PERMCO, Year, Month, Ret, SB, lagged_MktCap)]
+
 setkey(BEME_Rank,PERMCO,PERMNO,Year,Month)
 setkey(Size_Rank,PERMCO,PERMNO,Year,Month)
 
@@ -278,7 +264,7 @@ setkey(Size_Rank,PERMCO,PERMNO,Year,Month)
 six_portfolios <- merge(Size_Rank,BEME_Rank)
 
 # SMB and HML are all equal weighted 
-SMB_HML<- six_portfolios[,.(Ret = mean(Ret.x, na.rm = T)),.(Year,Month, HML,SB)]
+SMB_HML<- six_portfolios[,.(Ret = weighted.mean(Ret.x, lagged_MktCap.x, na.rm = T)),.(Year,Month, HML,SB)]
 SMB_HML <- SMB_HML[Year>1972]
 setkey(SMB_HML, Year,Month)
 
@@ -379,7 +365,7 @@ SMB_mat <- matrix(nrow=5, ncol=1, dimnames = list(c("Excess Return","Standard De
                                                      "Sharpe Ratio","Skewness","Correlation")))
 
 SMB_mat[1,1] <- mean(SMB$SMB_Ret - FF_Factors$RF)*12
-SMB_mat[2,1] <- sd(BEME_portfolio[BEME_Rank==i,BtM_Ret])*sqrt(12)
+SMB_mat[2,1] <- sd(SMB$SMB_Ret)*sqrt(12)
 SMB_mat[3,1] <- SMB_mat[1,1]/SMB_mat[2,1]
 SMB_mat[4,1] <- skewness(SMB$SMB_Ret)
 SMB_mat[5,1] <- cor(SMB$SMB_Ret, FF_Factors$SMB)
