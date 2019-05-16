@@ -34,13 +34,17 @@ crsp_monthly[, SHROUT := as.numeric(as.character(SHROUT))]
 # calculates the cum-Dividend returns
 crsp_monthly[, `:=`(Ret, ifelse(is.na(DLRET),RET,ifelse(is.na(RET), DLRET, (1+DLRET)*(1+RET)-1 )))]
 
-# Market Cap 
+# Market Cap and find the MktCap aggregate by PERMCO, which is the same firm
 crsp_monthly[, Mkt_cap := abs(PRC) * SHROUT/1000]
 setorder(crsp_monthly, PERMNO, date)
+
+# set the year and month as integer
+crsp_monthly[, Year:= year(date)]
+crsp_monthly[, Month:= month(date)]
+
+# ggregate by PERMCO, which is the same firm
+crsp_monthly<- crsp_monthly[, MktCap := sum(Mkt_cap,na.rm = T), .(PERMCO, Year, Month)]
 ######################################################################################## 
-
-
-
 
 ##################################### Cleaning up compustat data #####################################
 # load computat data from 1970 Dec to 2017 Dec, data only available until 2017 Dec
@@ -55,7 +59,13 @@ compustat_PRBA[, datadate:= ymd(datadate)]
 compustat_PRBA[, year := year(datadate)]
 
 # merge compustat with PRBA
-compustat_PRBA <- compustat_PRBA[,.(gvkey, prba, year)]
+compustat_PRBA <- compustat_PRBA[,.(gvkey, prba,year)]
+
+setkey(compustat_annual,gvkey,datadate)
+setkey(compustat_PRBA,gvkey,year)
+
+compustat_annual <- compustat_annual[datafmt=="STD" & indfmt=="INDL"]
+
 compustat_merged <- merge(compustat_annual, compustat_PRBA, by.x = c("gvkey","fyear"), by.y = c("gvkey","year"), all.x = T)
 ####################################################################
 
@@ -70,55 +80,65 @@ compustat_merged[,DT:= coalesce(txditc, itcb + txdb, itcb, txdb)]
 compustat_merged[, PS:= coalesce(pstkrv, pstkl, pstk)]
 
 # calculates book equity
-compustat_merged[,c("MinusPS","MinusPrba"):=.(-PS,-prba)]
+compustat_merged[,c("MinusPS","MinusPrba"):=.(-PS, -prba)]
 compustat_merged[,BE:=rowSums(.SD, na.rm = T),.SDcols=c("SHE","MinusPS","DT","MinusPrba")]
 compustat_merged[is.na(SHE), BE:=NA]
-
-# separate Financial service firms with non financial service firms
-compustat_annual_indl_only <- compustat_merged[indfmt == "INDL"]
-
 #####################################################################################
 
 
 ########################## Merge Linktable and Compustat data ##########################
 linktable <- as.data.table(read.csv("linktable.csv"))
 
-compustat_data <- compustat_annual_indl_only[, .(gvkey, datadate, BE, fyear, at)]
-linktable <- linktable[, .(gvkey, LPERMNO, LPERMCO, LINKDT, LINKENDDT)]
+compustat_data <- compustat_merged[, .(gvkey, datadate, BE, fyear, at)]
+linktable <- linktable[LINKPRIM %in% c("P","C"), .(gvkey, LPERMNO, LPERMCO, LINKDT, LINKENDDT)]
 
 # sort the data by gvkey first
-setorder(linktable,gvkey)
-setorder(compustat_data,gvkey)
+setorder(linktable, gvkey)
+setorder(compustat_data, gvkey)
+
+## to clean the LINKING table
+linktable[,LINKDT := ymd(LINKDT)]
+linktable[LINKENDDT == 'E', LINKENDDT := "2018-12-31"]
+linktable[,LINKENDDT := ymd(LINKENDDT)]
+
 
 # Merge the linktable with  with compustat thru gv
 gv_merged <- merge(compustat_data, linktable, by.x = c("gvkey"), by.y = c("gvkey"), all.x = T, allow.cartesian = T)
-gv_merged[,c("LINKStart","LINKEnd","datadate"):=.(as.integer(as.character(LINKDT)), as.integer(as.character(LINKENDDT)), as.integer(as.character(datadate)))]
 
 # make sure the gvkey date is within the link date range
-gv_merged_in_range <- gv_merged[ datadate >= LINKStart & (datadate <= LINKEnd | is.na(LINKEnd))]
+gv_merged[, datadate := ymd(datadate)]
+gv_merged_in_range <- gv_merged[ datadate >= LINKDT &datadate <= LINKENDDT]
 
 # get the non financial firm PERMCOS
 Non_FS_PERMCO <- unique(gv_merged_in_range$LPERMCO)
 
-write.table(Non_FS_PERMCO, file = "Non_FS_PERMCO.csv", row.names=FALSE, sep=",")
-write.table(gv_merged_in_range, file = "gv_merged_compustat.csv", row.names=FALSE, sep=",")
+#write.table(Non_FS_PERMCO, file = "Non_FS_PERMCO.csv", row.names=FALSE, sep=",")
+#write.table(gv_merged_in_range, file = "gv_merged_compustat.csv", row.names=FALSE, sep=",")
 #####################################################################################
 
-
-
+################################ Merge CRSP and Compustat together ############################################### 
+finaldata <- crsp_monthly %>%
+  left_join(gv_merged_in_range,by =c("PERMNO"="LPERMNO","Year"="fyear"))%>%
+  select(PERMNO,date,PERMCO,EXCHCD,Ret,MktCap,BE,at)%>%
+  filter(complete.cases(.)) %>% as.data.table
+#####################################################################################
 
 ########################## Find the size portfolio return #####################################
-rm(list=ls())
-# import clean up data 
-crsp_monthly_cleaned <- as.data.table(read.csv("crsp_monthly_cleaned.csv"))
-Non_FS_PERMCO <- c(read.csv("Non_FS_PERMCO.csv"))
-
-# get rid of Financial PERMCO
-crsp_monthly_cleaned <- crsp_monthly_cleaned[PERMCO %in% Non_FS_PERMCO$x]
 
 # set the year and month as integer
-crsp_monthly_cleaned[, Year:= year(date)]
-crsp_monthly_cleaned[, Month:= month(date)]
+finaldata[, Year:= year(date)]
+finaldata[, Month:= month(date)]
+setorder(finaldata, Year, Month)
+
+#rm(list=ls())
+# import clean up data 
+crsp_monthly_cleaned <- finaldata
+#crsp_monthly_cleaned <- as.data.table(read.csv("crsp_monthly_cleaned.csv"))
+#Non_FS_PERMCO <- c(read.csv("Non_FS_PERMCO.csv"))
+
+# get rid of Financial PERMCO
+crsp_monthly_cleaned <- crsp_monthly_cleaned[PERMCO %in% Non_FS_PERMCO]
+
 
 # PERMCO is a unique permanent identifier assigned by CRSP to all companies with issues on a CRSP file. 
 # This number is permanent for all securities issued by this company regardless of name changes.
@@ -126,20 +146,12 @@ crsp_monthly_cleaned[, Month:= month(date)]
 # In short: A PERMCO can have multiple PERMNOs
 
 # Adds up stocks from the same company based on PERMCO, 
-crsp_mergedBy_PERMCO<- crsp_monthly_cleaned[, MktCap := sum(Mkt_cap,na.rm=T), .(PERMCO, Year, Month)]
-crsp_mergedBy_JUNE <- crsp_mergedBy_PERMCO[Month == 6, .(PERMCO, Year, MktCap, EXCHCD)]
+crsp_mergedBy_JUNE <- crsp_monthly_cleaned[Month == 6, .(PERMCO, Year, MktCap, EXCHCD)]
 
 # sorting into deciles
 # NYSE stocks are used as breakpoints for all the stocks in NYSE AMEX and NASDAQ
-crsp_mergedBy_JUNE[,size_decile_all_stock := cut(MktCap, breaks=quantile(MktCap, probs=c(0:10)/10), 
-                                       labels=FALSE, include.lowest = T), .(Year)]
+crsp_mergedBy_JUNE[,size_decile := findInterval(MktCap, quantile(.SD[EXCHCD==1,MktCap], seq(0.1,0.9,0.1)), left.open = T) + 1,by = .(Year)]
 
-crsp_mergedBy_JUNE[,size_decile := cut(MktCap, breaks=quantile(.SD[EXCHCD==1,MktCap],probs=c(0:10)/10), 
-                                       labels=FALSE, include.lowest = T), .(Year)]
-
-# Extreme cumulative loss and gain is not captured by the NYSE Decile,manually sort them into 1 and 10 decile
-crsp_mergedBy_JUNE[is.na(size_decile) ,size_decile := size_decile_all_stock]
-crsp_mergedBy_JUNE[, size_decile_all_stock := NULL]
 crsp_mergedBy_JUNE <- crsp_mergedBy_JUNE[,.(PERMCO, Year, size_decile)]
 
 setorder(crsp_monthly_cleaned, Year, Month)
@@ -164,24 +176,24 @@ setkey(size_portfolio, Year, Month, size_Rank)
 size_portfolio <- size_portfolio[Year>1972]
 
 write.table(size_portfolio, file = "size_portfolio.csv", row.names=FALSE, sep=",")
-write.table(crsp_size_merged, file ="size_10Deciles.csv", row.names=FALSE, sep=",")
+#write.table(crsp_size_merged, file ="size_10Deciles.csv", row.names=FALSE, sep=",")
 # save the crsp_monthly_cleaned again as the financial firms have been filtered out already 
 # and the aggregated sum for each firm has been calculated
 write.table(crsp_monthly_cleaned, file = "crsp_monthly_cleaned.csv", row.names=FALSE, sep=",")
 #####################################################################################
 
 #################################### Find the BE/MEB portfolio ####################################
-rm(list=ls())
+#rm(list=ls())
 # import clean up data 
-crsp_monthly_cleaned <- as.data.table(read.csv("crsp_monthly_cleaned.csv"))
-gv_merged_compustat <- as.data.table(read.csv("gv_merged_compustat.csv"))
+#crsp_monthly_cleaned <- as.data.table(read.csv("crsp_monthly_cleaned.csv"))
+#gv_merged_compustat <- as.data.table(read.csv("gv_merged_compustat.csv"))
 historical_BE_raw_data <- as.data.table(read.csv("DFF_BE_With_Nonindust.csv", header = F)) # from Fama French website
 
-gv_merged_compustat <- gv_merged_compustat[, .(BE, fyear, LPERMCO, at)]
+gv_merged_in_range <- gv_merged_in_range[, .(BE, fyear, LPERMCO, LPERMNO, at)]
 crsp_mergedBy_DEC <- crsp_monthly_cleaned[Month == 12, .(PERMCO, PERMNO, Year, MktCap, EXCHCD)]
 
 #Use fyear to merge crsp and compustat
-crsp_compustat_merged <- merge(crsp_mergedBy_DEC, gv_merged_compustat,by.x=c('PERMCO','Year'),by.y=c('LPERMCO','fyear'), all.x = T)
+crsp_compustat_merged <- merge(crsp_mergedBy_DEC, gv_merged_in_range,by.x=c('PERMCO','Year','PERMNO'),by.y=c('LPERMNO', 'LPERMCO','fyear'), all.x = T)
 setkey(crsp_compustat_merged, Year)
 
 # handle historical BE 
@@ -198,7 +210,7 @@ crsp_compustat_BE_merged[is.na(BE) & !is.na(value), BE := value]
 
 # clean up crps and compustat merged data
 # if total asset is NA, assign BE to be NA as well, is BE is 0, assign BE to be NA
-crsp_compustat_BE_merged[BE== 0 | (is.na(at)),BE:=NA]
+crsp_compustat_BE_merged[BE == 0 | (is.na(at)),BE:=NA]
 crsp_compustat_BE_merged <- crsp_compustat_BE_merged[,c(-7)]
 crsp_compustat_BE_merged[,BEME := BE/MktCap]
 
@@ -275,11 +287,10 @@ setkey(SMB_HML, Year,Month)
 SMB <- SMB_HML[,.(SMB_Ret = (.SD[SB=="S" & HML=="L",Ret] + .SD[SB=="S" & HML=="M",Ret]+ .SD[SB=="S" & HML=="H",Ret] - .SD[SB=="B" & HML=="L",Ret] - .SD[SB=="B" & HML=="M",Ret] - .SD[SB=="B" & HML=="H",Ret])/3), by =.(Year, Month)]
 HML <- SMB_HML[, .(HML_Ret =(.SD[SB=="S" & HML=="H",Ret] + .SD[SB=="B" & HML=="H",Ret] - .SD[SB=="S" & HML=="L",Ret] - .SD[SB=="B" & HML=="H",Ret])/2), by =.(Year, Month)]
 
-BEME_portfolio <-  as.data.table(read.csv("BEME_portfolio.csv"))
-size_portfolio <-  as.data.table(read.csv("size_portfolio.csv"))
 ################################################################################################
 
 ####################################### output stats ME & Long short portfolio #############################################
+size_portfolio <-  as.data.table(read.csv("size_portfolio.csv"))
 FF_Factors<- as.data.table(read.csv("F-F_Research_Data_Factors.csv"))
 size_FF_portfolio<- as.data.table(read.csv("Portfolios_Formed_on_ME.csv"))
 
@@ -323,6 +334,7 @@ ME_mat[4,11] <- skewness(WML_ME)
 ME_mat[5,11] <- cor(WML_ME, (size_FF_portfolios_merged[Size_rank==1,Ret] - size_FF_portfolios_merged[Size_rank==10,Ret]))
 
 ####################################### output stats BEME & Long short portfolio #############################################
+BEME_portfolio <-  as.data.table(read.csv("BEME_portfolio.csv"))
 BEME_FF_Portfolio <- as.data.table(read.csv("Portfolios_Formed_on_BE-ME.csv"))
 BEME_FF_Portfolio[,date:= ymd(X, truncated = 1)]
 
@@ -373,4 +385,16 @@ SMB_mat[4,1] <- skewness(SMB$SMB_Ret)
 SMB_mat[5,1] <- cor(SMB$SMB_Ret, FF_Factors$SMB)
 
 ####################################### output stats HML portfolio #############################################
+
+setkey(HML,Year,Month)
+setkey(FF_Factors,Year,Month)
+# compute stats
+HML_mat <- matrix(nrow=5, ncol=1, dimnames = list(c("Excess Return","Standard Deviation",
+                                                    "Sharpe Ratio","Skewness","Correlation")))
+
+HML_mat[1,1] <- mean(HML$HML_Ret - FF_Factors$RF)*12
+HML_mat[2,1] <- sd(HML$HML_Ret)*sqrt(12)
+HML_mat[3,1] <- HML_mat[1,1]/HML_mat[2,1]
+HML_mat[4,1] <- skewness(HML$HML_Ret)
+HML_mat[5,1] <- cor(HML$HML_Ret, FF_Factors$HML)
 
