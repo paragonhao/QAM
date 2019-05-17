@@ -1,0 +1,205 @@
+---
+header-includes:
+- \usepackage{amssymb, amsmath, amsthm}
+- \usepackage{tabu}
+- \newcommand{\E}{\mathbb{E}}
+- \newcommand{\var}{{\rm Var}}
+- \newcommand{\N}{\mathcal{N}}
+output: pdf_document
+---
+  
+\noindent \begin{tabu} to \textwidth {@{}X[4 l] @{}X[r]}
+\textbf{Problem Set 4}           & \\ 
+\textbf{MFE 431: Quantitative Asset Management}   & \\ 
+\textbf{Professor: Bernard Herskovic}         & \\
+\textbf{Student: Xiahao Wang}         & \\
+\textbf{Name of whom I discussed this problem set with: Mu Lin}
+\end{tabu}
+
+
+## Question 1: 
+
+Prepare data for analysis. Combine necessary CRSP and Compustat datasets needed to define size and book-to-market decile portfolios as defined in Fama and French (1992b)1, as well as the HML and SMB factors as defined in Fama and French (1993)2. Detail which datasets you use,how you merged them, how you calculated the portfolios, and any differences between the building of the decile portfolios and the factors. Output should be between January 1973 and December
+2018.
+
+\textbf{Summary:}
+
+The resulting dataset:
+
+```{r echo=FALSE}
+suppressMessages(library(data.table))
+Q1_summary <- as.data.table(read.csv("Q1_summary.csv"))
+Q1_summary
+```
+
+
+1. \textbf{Data Selection: }
+
+Following the procedure from Fama French's paper, the datasets below are downloaded from CRSP and Compustat in WRDS and Fama French's data library.
+
+  * Monthly CRSP US equity Data (CRSP)
+  
+  * Fundamental Annual Updates for North America (Compustat)
+  
+  * Pension Annual (Compustat)
+  
+  * Linking Table (CRSP Compustat merged)
+  
+  * Historical Book Equity Data (Fama French)
+  
+As the problem set requests return data starting from 1973 Jan and 2018 Dec. Data from US equity and Fundamental updates are downloaded starting from 1970 til 2018 to ensure the return and decile sorting result starts from Jan 1973.
+
+
+
+2. \textbf{Clean up US equity data in CRSP} 
+
+Following the Fama French paper, I restrict the sample to common shares( share code 10 and 11) and to securities traded in the New York Stock Exchange, American Stock Exchange, or the Nasdaq Stock Exchange (exchange codes 1, 2, and 3)
+
+Scope: Dataset from CRSP Monthly from 1970 Jan to 2018 Dec
+
+Then set standard format of “date” and extract “Year” and “Month” column.
+
+
+### 2.a Handle missing data in Delisting Return (DLRET), and Return (RET):
+
+The missing data in RET are denoted by 'A','C','P','S','T','B','C',
+The missing data in DLRET are denoted by -66, -77, -88, -99
+Replace these missing data with NA. 
+
+
+
+### 2.b Delisting return calculation:
+
+To calculate the cum-dividend return (Ret), let RET be cum-dividend return if DLRET is missing. 
+If DLRET is not missing and RET is missing, let DLRET be just cum-dividend return.
+If both are not missing, use the formula from lecture notes:  Ret = (1 + DLRET)(1 + RET) - 1  to get the cum-dividend return.
+
+
+
+### 2.c Market Capitalisation calculation:
+There are some price that are negative, I take the absolute value for both price and shares outstanding and multiply them together to get the market capitalisation. As the CRSP data needs to be merged with Compustat which uses millions as its base unit, divide the market cap by 1000 so as to have the same base unit in the merged data.
+
+
+
+### 2.d Aggregation of Market cap by company
+
+From WRDS: PERMCO is a unique permanent identifier assigned by CRSP to all companies with issues on a CRSP file. This number is permanent for all securities issued by this company regardless of name changes. The PERMNO identifies a firm's security through all its history, and companies may have several stocks at one time.
+
+In short: A PERMCO can have multiple PERMNOs as a company can have multiple stocks. 
+
+Hence market cap of stocks from the same companies are aggregated together so as to reflect the right market value of the firm. 
+
+
+
+3. \textbf{Clean up Compustat datasets} 
+
+
+
+### 3.a Remove financial firms
+
+As the paper has suggested, financial firms have to be excluded from the analysis. The variable *indfmt* identifies financial firm as *FS* and non-financial firm as *INDL*.  Filter out the financial firms from the merged dataset. 
+
+
+
+### 3.b Merge compustat and pension
+
+Annual fundamental accounting variables (compustat) and Pension information (PRBA) are found separately on compustat database, hence the two datasets needs to be merged. 
+
+ * Extract the gvkey and the year from the pension dataset. 
+ 
+ * Use the two variables extracted and merge it with the compustat data
+
+
+
+### 3.c Calculation of book equity 
+
+Following the instructions on the problem set, there are the steps I used to calculate book equity.
+
+  * Calculate shareholder's equity (SHE): it is equal to stockholders equity - total (SEQ)
+    
+    * if not available, use common/ordinary equity - total (CEQ) + Preferred/Preference Stock (Capital) - Total (PSTK)
+    
+    * if not available, use Assets - Total (AT) - Liabilities - Total (LT) - Minority Interest (Balance Sheet) (MIB)
+    
+    * if not available, use AT - LT
+  
+  
+  * Calculate Deferred taxes (DT): it is equal to Deferred Taxes and Investment Tax Credit (TXDITC)
+    
+    * if not available, use Investment Tax Credit (Balance Sheet) (ITCB) + Deferred Taxes (Balance Sheet) (TXDB)
+    
+    * if not available, sum up what is not missing 
+  
+  
+  * Calculate preferred stock (PS): it is equal to Preferred Stock Redemption Value (PSTKRV)
+  
+    * if not available, use Preferred Stock Liquidating Value (PSTKL)
+    
+    * if not available, use Preferred/Preference Stock (Capital) - Total (PSTK)
+
+
+  * Calculate book equity (BE): BE = SHE - PS + DT - PRBA, PRBA comes from the pension dataset which we have merged earlier on. 
+  
+    * If SHE is not available, assign BE to NA, otherwise, include other variables in the calculation if not missing.
+
+  * Historical book equity data from Fama French website will be merged later on as it has only PERMNO as unique ID
+
+
+
+### 4. \textbf{Merge CRSP with Linking table and Compustat} 
+
+Following the procedure that was demonstrated during the TA session for this part, first merge the clean up CRSP monthly stock data with the linking table from CRSP compustat merged database by PERMCO. 
+
+### 4.a Filter the data based on Linking table start and end date
+
+Variables *LINKDT* and *LINKENDDT* indicate the start and end dates during which the PERMCO is available. Hence select only the PERMCO whose date is within the start and end date range. For PERMCO that still exists, the original data show 'E' instead of a date. Replace the character with NA for processing later on.
+
+### 4.b Further processing on merged data 
+
+Then, follow the steps below to clean up the merged data:
+
+  * Step 1: Filter on variable *LINKTYPE*, if there are a few types on PERMCO and the type is not 'LC', only keep 'LC'.
+  
+  * Step 2: Filter on variable *LINKPRIM*, same with step 1. Only keep 'P' if there are different values for LINKPRIM on the same PERMCO
+  
+  * Step 3: Filter on variable *LIID* , same with step 2. Only keep '1' if there are different values for LIID on the same PERMCO
+  
+  * Step 4: Filter on the variable *LINKENDDT*, the the link that's current
+  
+  * Step 5: Find the difference between the start and end date of the link, use the link that's been around the longest
+  
+  * Step 6: With the same logic on step 5, use the *gvkey* that has been around the longest
+  
+  * Step 7: Use the smaller gvkey if there are multiple with same PERMCO on the same date
+
+
+
+### 4.c Merge CRSP with Compustat
+
+Upon completing part 4 a & b, merge the CRSP data with Compustat by variable *gvkey* and *year*. Do not remove the NAs in the dataset. 
+
+
+### 5 \textbf{Calculation of size (ME) portfolio return} 
+
+Followint the problem set, below are the steps to calculate portfolio return:
+
+  * Step 1: As there might be multiple securities for the same firm (PERMCO), first aggregate the market cap by PERMCO for the same year and month. Variables `Year` and `Month` are extracet from the date of the merged dataset.
+  
+  * Step 2: size portfolio is calculated by matching Market cap at June of year t with return from July of year to June of year t + 1. The rebalancing is done at the end of June annually. Note that only stocks with data on June will be used for size decile sorting.
+  
+  * Step 3: The stocks are sorted into deciles from 1 to 10. The breakpoint is set based on Market cap of NYSE stock in June of that particular year.
+  
+  * Step 4: By now, the size decile has now been obtained for each stock across years. Compute the value-weighted return for all the companies within each decile to get monthly value-weighted return of the portfolio.
+
+  * Step 5: Restrict the data from 1973 Jan to 2018 Dec.
+  
+  * Step 6: Create a long short portfolio by going long on the 1st decile and shorting the 10th decile
+  
+
+### 6 \textbf{Calculation of Book to Market (BE/ME) portfolio return}
+
+Book value refers to the BE that we have calcuated earlier from compustat data. And Market value is the market cap for each firm. The firms are sorted into 10 deciles based on this ratio.
+
+Below are the steps to calculate BE/ME portfolio return:
+
+  * Step 1: 
