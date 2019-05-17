@@ -43,7 +43,7 @@ crsp_monthly[, Year:= year(date)]
 crsp_monthly[, Month:= month(date)]
 
 # ggregate by PERMCO, which is the same firm
-crsp_monthly<- crsp_monthly[, MktCap := sum(Mkt_cap,na.rm = T), .(PERMCO, Year, Month)]
+#crsp_monthly<- crsp_monthly[, MktCap := sum(Mkt_cap,na.rm = T), .(PERMCO, Year, Month)]
 ######################################################################################## 
 
 ##################################### Cleaning up compustat data #####################################
@@ -89,38 +89,75 @@ compustat_merged[is.na(SHE), BE:=NA]
 ########################## Merge Linktable and Compustat data ##########################
 linktable <- as.data.table(read.csv("linktable.csv"))
 
-compustat_data <- compustat_merged[, .(gvkey, datadate, BE, fyear, at)]
-linktable <- linktable[LINKPRIM %in% c("P","C"), .(gvkey, LPERMNO, LPERMCO, LINKDT, LINKENDDT)]
+#### code from TA session
+merged <- merge(crsp_monthly, linktable, by.x='PERMCO', by.y = 'LPERMCO', allow.cartesian = T)
+setkey(merged)
 
-# sort the data by gvkey first
-setorder(linktable, gvkey)
-setorder(compustat_data, gvkey)
+merged[,LINKDT := ymd(LINKDT)]
+merged[LINKENDDT == 'E', LINKENDDT := NA]
+merged[,LINKENDDT := ymd(LINKENDDT)]
+merged <- merged[(is.na(LINKDT) | date >= LINKDT) & (is.na(LINKENDDT) | date <= LINKENDDT)]
+setorder(merged, gvkey, date)
 
-## to clean the LINKING table
-linktable[,LINKDT := ymd(LINKDT)]
-linktable[LINKENDDT == 'E', LINKENDDT := "2018-12-31"]
-linktable[,LINKENDDT := ymd(LINKENDDT)]
+# Multiple GVKEYs per PERMCO
 
+### First, if LC not LC linktype, only keep LC
+# identify Same PERMCO but different PERMNO
+merged[, prob := .N > 1, by = .(PERMCO, date)]
+merged[, Good_match := sum(LINKTYPE == 'LC'), by =.(PERMCO, date)]
+merged <- merged[!(prob == T & Good_match == T & LINKTYPE != 'LC')]
 
-# Merge the linktable with  with compustat thru gv
-gv_merged <- merge(compustat_data, linktable, by.x = c("gvkey"), by.y = c("gvkey"), all.x = T, allow.cartesian = T)
+### Second, if P and not P linkprim, only keep p
+merged[, prob := .N > 1, by= .(PERMCO, date)]
+merged[, Good_match := sum(LINKPRIM == 'P'), by =.(PERMCO, date)]
+merged <- merged[!(prob == T & Good_match == T & LINKPRIM != 'P')]
 
-# make sure the gvkey date is within the link date range
-gv_merged[, datadate := ymd(datadate)]
-gv_merged_in_range <- gv_merged[ datadate >= LINKDT &datadate <= LINKENDDT]
+### Third, if 1 and not liid, only keep 1 
+merged[, prob := .N > 1, by = .(PERMCO, date)]
+merged[, Good_match := sum(LIID == 1), by =.(PERMCO,date)]
+merged <- merged[!(prob == T & Good_match == T & LIID != 1)]
 
-# get the non financial firm PERMCOS
-Non_FS_PERMCO <- unique(gv_merged_in_range$LPERMCO)
+### Fourth, use the link that's current
+merged[, prob := .N > 1, by = .(PERMCO, date)]
+merged[, Good_match := sum(is.na(LINKENDDT)), by = .(PERMCO, date)]
+merged <- merged[!(prob==T & Good_match == T & !is.na(LINKENDDT))]
 
-#write.table(Non_FS_PERMCO, file = "Non_FS_PERMCO.csv", row.names=FALSE, sep=",")
-#write.table(gv_merged_in_range, file = "gv_merged_compustat.csv", row.names=FALSE, sep=",")
+### Fifth, use the link that's been around the longest
+merged[, prob := .N > 1, by = .(PERMCO, date)]
+merged[, Good_match := NULL]
+merged[is.na(LINKENDDT), LINKENDDT := as.Date('2019-12-31', '%Y-%m-%d')]
+merged[, Date_diff := as.integer(LINKENDDT - LINKDT)]
+setorder(merged, PERMCO, date, Date_diff)
+merged[prob == T, Good_match := Date_diff == Date_diff[.N], by = .(PERMCO, date)]
+merged <- merged[!(prob==T & Good_match != T)]
+
+### Sixth, use the gvkey that has been around the longest
+merged[, prob := .N > 1, by = .(PERMCO, date)]
+merged[, Good_match :=NULL]
+setorder(merged, gvkey, LINKDT)
+merged[prob == T, start_Date := LINKDT[1], by = .(gvkey)]
+setorder(merged, gvkey, LINKENDDT)
+merged[prob == T, end_Date := LINKENDDT[.N], by = .(gvkey)]
+merged[, Date_diff := as.integer(end_Date - start_Date)]
+setorder(merged, PERMCO, date, Date_diff)
+merged[prob == T, Good_match := Date_diff == Date_diff[.N], by = .(PERMCO, date)]
+merged <- merged[!(prob == T & Good_match != T)]
+
+### Seventh, use the smaller gvkey
+setorder(merged, PERMCO, date, gvkey)
+merged <- unique(merged, by = c('PERMCO', 'date'))
+
+### Clean up extra variables and final check of match
+merged <- merged[, .(gvkey, date, EXCHCD, Mkt_cap, PERMCO, PERMNO, Ret , Year, Month)]
+
 #####################################################################################
 
 ################################ Merge CRSP and Compustat together ############################################### 
+compustat_merged_data <- compustat_merged[, .(gvkey, fyear, BE, at)]
 
-finaldata <- crsp_monthly %>%
-  left_join(gv_merged_in_range,by =c("PERMNO"="LPERMNO","Year"="fyear"))%>%
-  select(PERMNO,date,PERMCO,EXCHCD,Ret,MktCap,BE,at)%>%
+finaldata <- merged %>%
+  left_join(compustat_merged_data,by =c("gvkey"="gvkey","Year"="fyear"))%>%
+  select(gvkey, date, PERMNO, PERMCO, EXCHCD, Ret, Mkt_cap, BE, at)%>%
   filter(complete.cases(.)) %>% as.data.table
 
 #####################################################################################
@@ -132,14 +169,8 @@ finaldata[, Year:= year(date)]
 finaldata[, Month:= month(date)]
 setorder(finaldata, Year, Month)
 
-#rm(list=ls())
-# import clean up data 
-crsp_monthly_cleaned <- finaldata
-#crsp_monthly_cleaned <- as.data.table(read.csv("crsp_monthly_cleaned.csv"))
-#Non_FS_PERMCO <- c(read.csv("Non_FS_PERMCO.csv"))
 
-# get rid of Financial PERMCO
-crsp_monthly_cleaned <- crsp_monthly_cleaned[PERMCO %in% Non_FS_PERMCO]
+crsp_monthly_cleaned<- finaldata[, MktCap := sum(Mkt_cap,na.rm = T), .(PERMCO, Year, Month)]
 
 # PERMCO is a unique permanent identifier assigned by CRSP to all companies with issues on a CRSP file. 
 # This number is permanent for all securities issued by this company regardless of name changes.
