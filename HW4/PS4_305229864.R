@@ -41,9 +41,6 @@ setorder(crsp_monthly, PERMNO, date)
 # set the year and month as integer
 crsp_monthly[, Year:= year(date)]
 crsp_monthly[, Month:= month(date)]
-
-# ggregate by PERMCO, which is the same firm
-#crsp_monthly<- crsp_monthly[, MktCap := sum(Mkt_cap,na.rm = T), .(PERMCO, Year, Month)]
 ######################################################################################## 
 
 ##################################### Cleaning up compustat data #####################################
@@ -157,8 +154,7 @@ compustat_merged_data <- compustat_merged[, .(gvkey, fyear, BE, at)]
 
 finaldata <- merged %>%
   left_join(compustat_merged_data,by =c("gvkey"="gvkey","Year"="fyear"))%>%
-  select(gvkey, date, PERMNO, PERMCO, EXCHCD, Ret, Mkt_cap, BE, at)%>%
-  filter(complete.cases(.)) %>% as.data.table
+  select(gvkey, date, PERMNO, PERMCO, EXCHCD, Ret, Mkt_cap, BE, at)%>% as.data.table
 
 #####################################################################################
 
