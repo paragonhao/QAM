@@ -383,12 +383,12 @@ for(i in 1:10){
   BEME_mat[5,i] <- cor(BEME_portfolio[BEME_Rank==i,BtM_Ret], BEME_FF_Portfolio_merged[BEME_rank == i,Ret])
 }
 
-WML_BEME <- BEME_portfolio[BEME_Rank==1,BtM_Ret] - BEME_portfolio[BEME_Rank==10,BtM_Ret]
+WML_BEME <- BEME_portfolio[BEME_Rank==10, BtM_Ret] - BEME_portfolio[BEME_Rank==1,BtM_Ret]
 BEME_mat[1,11] <- mean(WML_BEME)*12
 BEME_mat[2,11] <- sd(WML_BEME)*sqrt(12)
 BEME_mat[3,11] <- BEME_mat[1,11]/BEME_mat[2,11]
 BEME_mat[4,11] <- skewness(WML_BEME)
-BEME_mat[5,11] <- cor(WML_BEME, (BEME_FF_Portfolio_merged[BEME_rank==1,Ret] - BEME_FF_Portfolio_merged[BEME_rank==10,Ret]))
+BEME_mat[5,11] <- cor(WML_BEME, (BEME_FF_Portfolio_merged[BEME_rank==10,Ret] - BEME_FF_Portfolio_merged[BEME_rank==1,Ret]))
 
 write.table(WML_BEME, file="WML_BEME.csv", row.names=FALSE, sep=",")
 write.table(BEME_mat, file = "BEME_Matrix.csv", row.names=FALSE, sep=",")
