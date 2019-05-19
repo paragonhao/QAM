@@ -83,7 +83,7 @@ compustat_merged[is.na(SHE), BE:=NA]
 #####################################################################################
 
 
-########################## Merge Linktable and Compustat data ##########################
+########################## Merge Linktable and CRSP data ##########################
 linktable <- as.data.table(read.csv("linktable.csv"))
 
 #### code from TA session
@@ -154,7 +154,7 @@ compustat_merged_data <- compustat_merged[, .(gvkey, fyear, BE, at)]
 
 finaldata <- merged %>%
   left_join(compustat_merged_data,by =c("gvkey"="gvkey","Year"="fyear"))%>%
-  select(gvkey, date, PERMNO, PERMCO, EXCHCD, Ret, Mkt_cap, BE, at)%>% as.data.table
+  select(gvkey, date, PERMNO, PERMCO, EXCHCD, Ret, Mkt_cap, BE, at) %>% as.data.table
 
 #####################################################################################
 
@@ -285,13 +285,13 @@ setkey(Size_Rank,PERMCO,PERMNO,Year,Month)
 # Merge the two 
 sizeBEME_portfolios <- merge(Size_Rank,BEME_Rank)
 
-# SMB and HML are all equal weighted 
+# SMB and HML are all value weighted weighted 
 SMB_HML<- sizeBEME_portfolios[,.(Ret = weighted.mean(Ret.x, lagged_MktCap.x, na.rm = T)),.(Year,Month, HML,SB)]
 SMB_HML <- SMB_HML[Year>1972]
 setkey(SMB_HML, Year,Month)
 
 # SMB is defined as (SL + SM + SH)/3 - (BL + BM + BH)/3
-# HMLis defined as (SH + BH)/2 - (SL + BH)/2
+# HMLis defined as (SH + BH)/2 - (SL + BL)/2
 SMB <- SMB_HML[,.(SMB_Ret = (.SD[SB=="S" & HML=="L",Ret] + .SD[SB=="S" & HML=="M",Ret]+ .SD[SB=="S" & HML=="H",Ret] - .SD[SB=="B" & HML=="L",Ret] - .SD[SB=="B" & HML=="M",Ret] - .SD[SB=="B" & HML=="H",Ret])/3), by =.(Year, Month)]
 HML <- SMB_HML[, .(HML_Ret =(.SD[SB=="S" & HML=="H",Ret] + .SD[SB=="B" & HML=="H",Ret] -.SD[SB=="S" & HML=="L",Ret] - .SD[SB=="B" & HML=="L",Ret])/2), by =.(Year, Month)]
 
@@ -345,13 +345,14 @@ for(i in 1:10){
   ME_mat[5,i] <- cor(size_portfolio[size_Rank==i,Size_Ret], size_FF_portfolios_merged[Size_rank==i,Ret])
 }
 
-WML_ME <- size_portfolio[size_Rank==1,Size_Ret] - size_FF_portfolios_merged[Size_rank==10,Ret]
+WML_ME <- size_portfolio[size_Rank==1,Size_Ret] - size_portfolio[size_Rank==10,Size_Ret]
 ME_mat[1,11] <- mean(WML_ME)*12
 ME_mat[2,11] <- sd(WML_ME)*sqrt(12)
 ME_mat[3,11] <- ME_mat[1,11]/ME_mat[2,11]
 ME_mat[4,11] <- skewness(WML_ME)
 ME_mat[5,11] <- cor(WML_ME, (size_FF_portfolios_merged[Size_rank==1,Ret] - size_FF_portfolios_merged[Size_rank==10,Ret]))
 
+write.table(WML_ME, file="WML_ME.csv", row.names=FALSE, sep=",")
 write.table(ME_mat, file = "ME_Matrix.csv", row.names=FALSE, sep=",")
 ####################################### output stats BEME & Long short portfolio #############################################
 BEME_FF_Portfolio <- as.data.table(read.csv("Portfolios_Formed_on_BE-ME.csv"))
@@ -382,13 +383,14 @@ for(i in 1:10){
   BEME_mat[5,i] <- cor(BEME_portfolio[BEME_Rank==i,BtM_Ret], BEME_FF_Portfolio_merged[BEME_rank == i,Ret])
 }
 
-WML_BEME <- BEME_portfolio[BEME_Rank==1,BtM_Ret] - BEME_FF_Portfolio_merged[BEME_rank==10,Ret]
+WML_BEME <- BEME_portfolio[BEME_Rank==1,BtM_Ret] - BEME_portfolio[BEME_Rank==10,BtM_Ret]
 BEME_mat[1,11] <- mean(WML_BEME)*12
 BEME_mat[2,11] <- sd(WML_BEME)*sqrt(12)
 BEME_mat[3,11] <- BEME_mat[1,11]/BEME_mat[2,11]
 BEME_mat[4,11] <- skewness(WML_BEME)
 BEME_mat[5,11] <- cor(WML_BEME, (BEME_FF_Portfolio_merged[BEME_rank==1,Ret] - BEME_FF_Portfolio_merged[BEME_rank==10,Ret]))
 
+write.table(WML_BEME, file="WML_BEME.csv", row.names=FALSE, sep=",")
 write.table(BEME_mat, file = "BEME_Matrix.csv", row.names=FALSE, sep=",")
 ####################################### output stats SMB portfolio #############################################
 

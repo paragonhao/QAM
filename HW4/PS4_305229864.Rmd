@@ -28,6 +28,9 @@ The resulting dataset:
 
 ```{r echo=FALSE}
 suppressMessages(library(data.table))
+suppressMessages(library(knitr))
+suppressWarnings(library(kableExtra))
+suppressWarnings(library(lubridate))
 Q1_summary <- as.data.table(read.csv("Q1_summary.csv"))
 Q1_summary
 ```
@@ -152,54 +155,261 @@ Following the procedure that was demonstrated during the TA session for this par
 
 ### 4.a Filter the data based on Linking table start and end date
 
-Variables *LINKDT* and *LINKENDDT* indicate the start and end dates during which the PERMCO is available. Hence select only the PERMCO whose date is within the start and end date range. For PERMCO that still exists, the original data show 'E' instead of a date. Replace the character with NA for processing later on.
+Variables LINKDT and LINKENDDT indicate the start and end dates during which the PERMCO is available. Hence select only the PERMCO whose date is within the start and end date range. For PERMCO that still exists, the original data show 'E' instead of a date. Replace the character with NA for processing later on.
 
 ### 4.b Further processing on merged data 
 
 Then, follow the steps below to clean up the merged data:
 
-  * Step 1: Filter on variable *LINKTYPE*, if there are a few types on PERMCO and the type is not 'LC', only keep 'LC'.
+  * Step 1: Filter on variable LINKTYPE, if there are a few types on PERMCO and the type is not 'LC', only keep 'LC'.
   
-  * Step 2: Filter on variable *LINKPRIM*, same with step 1. Only keep 'P' if there are different values for LINKPRIM on the same PERMCO
+  * Step 2: Filter on variable LINKPRIM, same with step 1. Only keep 'P' if there are different values for LINKPRIM on the same PERMCO
   
-  * Step 3: Filter on variable *LIID* , same with step 2. Only keep '1' if there are different values for LIID on the same PERMCO
+  * Step 3: Filter on variable LIID , same with step 2. Only keep '1' if there are different values for LIID on the same PERMCO
   
-  * Step 4: Filter on the variable *LINKENDDT*, the the link that's current
+  * Step 4: Filter on the variable LINKENDDT, the the link that's current
   
   * Step 5: Find the difference between the start and end date of the link, use the link that's been around the longest
   
-  * Step 6: With the same logic on step 5, use the *gvkey* that has been around the longest
+  * Step 6: With the same logic on step 5, use the gvkey that has been around the longest
   
   * Step 7: Use the smaller gvkey if there are multiple with same PERMCO on the same date
 
-
-
 ### 4.c Merge CRSP with Compustat
 
-Upon completing part 4 a & b, merge the CRSP data with Compustat by variable *gvkey* and *year*. Do not remove the NAs in the dataset. 
+Upon completing part 4 a & b, merge the CRSP data with Compustat by variable gvkey and year. Do not remove the NAs in the dataset. 
+
 
 
 ### 5 \textbf{Calculation of size (ME) portfolio return} 
 
 Followint the problem set, below are the steps to calculate portfolio return:
 
-  * Step 1: As there might be multiple securities for the same firm (PERMCO), first aggregate the market cap by PERMCO for the same year and month. Variables `Year` and `Month` are extracet from the date of the merged dataset.
+  * Step 1: As there might be multiple securities for the same firm (PERMCO), first aggregate the market cap by PERMCO for the same year and month. Variables Year and Month are extracet from the date of the merged dataset.
   
-  * Step 2: size portfolio is calculated by matching Market cap at June of year t with return from July of year to June of year t + 1. The rebalancing is done at the end of June annually. Note that only stocks with data on June will be used for size decile sorting.
+  * Step 2: size portfolio is calculated by matching Market cap at June of year t with return from July of year t to June of year t + 1. The rebalancing is done at the end of June annually. Note that only stocks with data on June will be used for size decile sorting.
   
   * Step 3: The stocks are sorted into deciles from 1 to 10. The breakpoint is set based on Market cap of NYSE stock in June of that particular year.
   
-  * Step 4: By now, the size decile has now been obtained for each stock across years. Compute the value-weighted return for all the companies within each decile to get monthly value-weighted return of the portfolio.
+  * Step 4: By now, the size decile has now been obtained for each stock across years. Compute the value-weighted return using 1 month lagged market cap for all the companies within each decile to get monthly value-weighted return of the portfolio.
 
   * Step 5: Restrict the data from 1973 Jan to 2018 Dec.
   
   * Step 6: Create a long short portfolio by going long on the 1st decile and shorting the 10th decile
   
 
+
 ### 6 \textbf{Calculation of Book to Market (BE/ME) portfolio return}
 
-Book value refers to the BE that we have calcuated earlier from compustat data. And Market value is the market cap for each firm. The firms are sorted into 10 deciles based on this ratio.
+Book value refers to the BE that we have calcuated earlier from compustat data. And Market value is the market cap for each firm. The firms are sorted into 10 deciles based on the ratio book value / market value. 
 
 Below are the steps to calculate BE/ME portfolio return:
+  
+  * Step 1: As there might be multiple securities for the same firm (PERMCO), first aggregate the market cap by PERMCO for the same year and month. Variables Year and Month are extracet from the date of the merged dataset.
+  
+  * Step 2: BE/ME portfolio is calculated by matching Market cap and book equity at December of year t-1 with return from July of year t to June of year t + 1. The rebalancing is done at end of June annually. Note that only stocks with data on December will be used for BE/ME decile sorting.
+  
+  * Step 3: Load the historical book equity information from Fama French website, restrict data from 1970 onwards. Merge the data with the merged CRSP and compustat dataset. Assign the historical book equity as book equity if the current book equity is NA.
+  
+  * Step 4: The stocks are sorted into deciles from 1 to 10. The breakpoint is set based on BE/ME of NYSE stock in December of that particular year. Note that book equity value less than 0, equal to 0 is excluded when finding the breakpoint. Book equity is set to NA as well if the total asset is NA for that period. Also the market cap needs to be available in order to have a BE/ME ratio. 
+  
+  * Step 5: By now, the BE/ME decile has now been obtained for each stock across years. Compute the value-weighted return using 1 month lagged market cap for all the companies within each decile to get monthly value-weighted return of the portfolio.
+  
+  * Step 6: Restrict the data from 1973 Jan to 2018 Dec.
+  
+  * Step 7: Create a long short portfolio by going long on the 1st decile and shorting the 10th decile
 
-  * Step 1: 
+
+
+### 7 \textbf{Calculation of SMB and HML portfolio return}
+
+Following the Fama French website, portfolio is double sorted into 6 portfolios based on ME and BE/ME.
+
+  * ME is sorted based on median of the market cap into 2 deciles
+  
+  * BE/ME is sorted based on 30th and 70th percentile
+  
+  * Formula : SMB = 1/3(Small Value + Small Neutral + Small Growth - Big Value - Big Neutral - Big Growth)
+  
+  * Formula : HML = 1/2(Small Value + Big Value - Small Growth - Big Growth)
+  
+As the same rebalancing and lagging periods are applied for the characteritic portfolio as well as the size and BE/ME portfolio, the result from the previous portfolio ranking are be used to do the sorting for SMB and HML portfolios.
+
+  
+  * Step 1: Sort ME portfolio. The current ME (size) ranking is from 1 to 10 for all stocks, sort into 2 deciles small (1 - 5), big (5 - 10)
+
+  * Step 2: Sort BE/ME portfolio. The current BE/ME ranking is from 1 to 10 for all stocks. sort into 3 deciles Low (1-3), Medium (4-7), High (8-10)
+  
+  * Step 3: Merge the two portfolios so as to get 6 differnet combinations of portfolios, then calculate the value-weighted portfolio based on lagged market cap.
+  
+  * Step 4: Restrict the data from 1973 Jan to 2018 Dec.
+  
+## Question 2: 
+
+The summary for size decile and long short portfolio, shown in table 1.
+
+1. Annualized Excess Return: Annualized excess return for decile 1 to 10 (Return above risk free ) = Average of excess return multiply by 12. Annualize return for long short portfolio = average of return of (decile 1 - decile 10)
+
+2. Annualized Volatility: Compute portfolio standard deviation as the sample standard deviation across years for each decile and long short and annualize it by multiplying by square root of 12. 
+
+3. Sharp Ratio: Compute the sharp ratio using the following formula: Sharp ratio = Annualized Excess Return /  Annualized Volatility
+
+4. Skewness: Compute the skewness of the return using the following formula: skewness(monthly return), where skewness is the function from library moments to calculate the skewness. 
+
+5. Correlation: Find the correlation between the replicated decile and long short portfolio and the one on Fama French website named *Portfolios_Formed_on_ME.csv*
+
+```{r echo=FALSE}
+ME_matrix <- as.data.table(read.csv("ME_Matrix.csv"))
+colnames(ME_matrix) <- c(paste0("Decile ",1:10), "Long Short")
+
+title <- c("Excess Mean Return","Volatility","SR","Skewness","Correlation")
+ME_matrix <- cbind(Return_Statistics = title, ME_matrix)
+
+kable(ME_matrix, "latex", booktabs =T, caption = "Size decile and long short portfolios", align ="l") %>% kable_styling(latex_options = c("striped", "scale_down")) %>% add_header_above(c(" ", "Size decile Portfolios" = 10)) 
+```
+
+
+
+## Question 3: 
+
+The summary for book-to-market decile and long short portfolio, shown in table 2
+
+```{r echo=FALSE}
+BEME_matrix <- as.data.table(read.csv("BEME_Matrix.csv"))
+colnames(BEME_matrix) <- c(paste0("Decile ",1:10), "Long Short")
+
+title <- c("Excess Mean Return","Volatility","SR","Skewness","Correlation")
+BEME_matrix <- cbind(Return_Statistics = title, BEME_matrix)
+
+kable(BEME_matrix, "latex", booktabs =T, caption = "BE/ME decile and long short portfolios", align ="l") %>% kable_styling(latex_options = c("striped", "scale_down")) %>% add_header_above(c(" ", "BE/ME decile Portfolios" = 10)) 
+```
+
+1. Annualized Excess Return: Annualized excess return for decile 1 to 10 (Return above risk free ) = Average of monthly excess return multiply by 12. Annualize return for long short portfolio = average of return of (decile 1 - decile 10)
+
+2. Annualized Volatility: Compute portfolio standard deviation as the sample standard deviation across years for each decile and long short and annualize it by multiplying by square root of 12. 
+
+3. Sharp Ratio: Compute the sharp ratio using the following formula: Sharp ratio = Annualized Excess Return /  Annualized Volatility
+
+4. Skewness: Compute the skewness of the return using the following formula: skewness(monthly return), where skewness is the function from library moments to calculate the skewness. 
+
+5. Correlation: Find the correlation between the replicated decile and long short portfolio and the one on Fama French website named *Portfolios_Formed_on_BE-ME.csv*
+
+## Question 4: 
+
+Compare the long short portfolio from size and BE/ME with market portfolio for the last 10 years. As observed, the return for the size, BE/ME portfolio are lower than the market portfolio.
+
+```{r echo=FALSE}
+WML_ME <-  as.data.table(read.csv("WML_ME.csv"))
+WML_BEME <-  as.data.table(read.csv("WML_BEME.csv"))
+Monthly_CRSP_Stocks <- as.data.table(read.csv("Monthly_CRSP_Stocks.csv"))
+vwretd <- Monthly_CRSP_Stocks[Year > 2009, .(Year, Month,Stock_Vw_Ret)]
+vwretd[, date := paste0(Year,"-",Month,"-01")]
+# get cumulative return 
+WML_ME_CumProd <- cumprod(tail(WML_ME, 108) + 1)
+WML_BEME_CumProd <- cumprod(tail(WML_BEME, 108)+ 1)
+vwretd_CumProd <- cumprod(vwretd$Stock_Vw_Ret + 1)
+
+dates <- ymd(vwretd$date)
+
+plot(ylab="Cumulative Return", ylim = c(0.8, 3.5), x =dates, y= WML_ME_CumProd$x, type ="l", col ="red", main = "Size and BE/ME portfolio vs Market portfolio from 2009 to 2018")
+lines(x =dates, y= WML_BEME_CumProd$x, col ="green")
+lines(x =dates, y= vwretd_CumProd, col="black")
+
+legend("topleft",legend=c("Size WML","BE/ME WML", "Value-Weighted"),fill=c("red","green","black"), cex = 0.8)
+
+```
+
+
+## Question 5: 
+
+Summarny for SMB portfolio show in table 3:
+
+1. Annualized Excess Return: Annualized excess return  = Average of monthly return minus Fama French risk free rate and multiply by 12.
+
+2. Annualized Volatility: Compute portfolio standard deviation as the sample standard deviation across years for each decile annualize it by multiplying by square root of 12. 
+
+3. Sharp Ratio: Compute the sharp ratio using the following formula: Sharp ratio = Annualized Excess Return /  Annualized Volatility
+
+4. Skewness: Compute the skewness of the return using the following formula: skewness(monthly return), where skewness is the function from library moments to calculate the skewness. 
+
+5. Correlation: Find the correlation between the replicated SMB portfolio and the one in Fama French website named *F-F_Research_Data_Factors.csv*
+
+
+```{r echo=FALSE}
+SMB_matrix <- as.data.table(read.csv("SMB_Matrix.csv"))
+colnames(SMB_matrix) <- c("SMB")
+
+title <- c("Excess Mean Return","Volatility","SR","Skewness","Correlation")
+SMB_matrix <- cbind(Return_Statistics = title, SMB_matrix)
+
+kable(SMB_matrix, "latex", booktabs =T, caption = "SMB portfolios", align ="l")
+```
+
+
+
+Summarny for HML portfolio show in table 4:
+
+1. Annualized Excess Return: Annualized excess return  = Average of monthly return minus Fama French risk free rate and multiply by 12.
+
+2. Annualized Volatility: Compute portfolio standard deviation as the sample standard deviation across years for each decile annualize it by multiplying by square root of 12. 
+
+3. Sharp Ratio: Compute the sharp ratio using the following formula: Sharp ratio = Annualized Excess Return / Annualized Volatility
+
+4. Skewness: Compute the skewness of the return using the following formula: skewness(monthly return), where skewness is the function from library moments to calculate the skewness. 
+
+5. Correlation: Find the correlation between the replicated HML portfolio and the one in Fama French website named *F-F_Research_Data_Factors.csv*
+
+```{r echo=FALSE}
+HML_matrix <- as.data.table(read.csv("HML_Matrix.csv"))
+colnames(HML_matrix) <- c("HML")
+
+title <- c("Excess Mean Return","Volatility","SR","Skewness","Correlation")
+HML_matrix <- cbind(Return_Statistics = title, HML_matrix)
+
+kable(HML_matrix, "latex", booktabs =T, caption = "HML portfolios", align ="l")
+```
+
+
+
+## Question 6: Compare and Contrast the characteristics portfolio in 1992 paper and factors portfolio in 1993
+
+Definition of characteristic vs factor portfolio: We often highlight that the value premium can be explained by either risk and/or mispricing. A core aspect of the risk argument is that a portfolio’s factor “loading,” or covariance, on a specific factor (e.g., Fama and French HML value factor) represent a proxy for some unobserved systematic risk. The characteristics argument claims that value firms earned a higher expected return simply because they have higher B/M ratios (which may be independent of systematic risk).
+
+### Characteristics (1992 paper)
+
+Scope: Assets are common stocks only
+
+Set of variables: size (ME) and book-to-market ratio (BE/ME)
+
+The approach to testing asset-pricing model: Fama and French (1992a) use the cross-section regressions of Fama and MacBeth (1973): the cross-section of stock returns is regressed on variables hypothesized to explain average returns.
+
+Summary of the result: Two easily measured variables, ME and BE/ME, provide a simple and powerful characterization of the cross-section of average stock returns for the 1963-1990 period.
+
+The result suggests that:
+
+* Beta doesn't seems to help explain the cross-section of average stock returns
+
+* The combination of size and book-to-market equity seems to absorb the roles of leverage and E/P in average stock returns, at least during our 1963-1990 sample period.
+
+* Stock risks are multidimensional. One dimension of risk is proxied by size, ME. Another dimension of risk is proxied by BE/ME,
+
+
+
+### Factors (1993 paper)
+
+Scope: Assets are common stocks and U.S. government and corporate bonds
+
+Set of variables: ME BE/ME and term structure variables for bonds
+
+The approach to testing asset-pricing model:This paper uses the time-series regression approach of Black, Jensen, and Scholes (1972). Monthly returns on stocks and bonds are regressed on the returns to a market portfolio of stocks and mimicking portfolios for size, book-to-market equity (BE/ME), and term-structure risk factors in returns.
+
+Summary of the result: For stocks, portfolios constructed to mimic risk factors related to size and BE/ME capture strong common variation in returns, no matter what else is in the time-series regressions. This is evidence that ME and BE/ME equity indeed proxy for sensitivity to common risk factors in stock returns. Moreover, for the stock portfolios we examine, the intercepts from three-factor regressions that include the excess market return and the mimicking returns for size and BE/ME factors are close to 0. Thus a market factor and our proxies for the risk factors related to ME and BE/ME equity seem to do a good job explaining the cross-section of average stock returns.
+
+For bonds, the mimicking portfolios for the two term-structure factors (a term premium and a default premium) capture most of the variation in the returns on our government and corporate bond portfolios. The term-structure factors also ‘explain’ the average returns on bonds, but the average premiums for the term-structure factors, like the average excess bond returns, are close to 0. Thus, the hypothesis that all the corporate and government bond portfolios have the
+same long-term expected returns also cannot be rejected.
+
+
+
+
+  
+  
