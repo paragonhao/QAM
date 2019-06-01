@@ -159,5 +159,41 @@ finaldata <- merged %>%
 
 setorder(finaldata, date)
 
+# Computstat only has data until 2017 dec, remove all data in 2018 which only have NAs on the fundamentals
+finaldata[, Year:= year(date)]
+finaldata[, Month:= month(date)]
+finaldata <- finaldata[Year < 2018,]
 #####################################################################################
 
+################################ sorting the 1000 largest stocks based on each metrics ####################################
+finaldata[, BE_index := 1]
+finaldata[, CF_NET_index := 1]
+finaldata[, dvt_index := 1]
+finaldata[, revt_index := 1]
+finaldata[, emp_index := 1]
+finaldata[, sale_index := 1]
+
+# sort BE and label it from largest to smallest (1 to 1000)
+setorderv(finaldata, cols = c("Year", "Month", "BE"), order =-1, na.last = T)
+finaldata[, BE_index := cumsum(BE_index), .(Year, Month)]
+
+# sort Cash flow and label it from largest to smallest (1 to 1000)
+setorderv(finaldata, cols = c("Year", "Month", "CF_NET"), order =-1, na.last = T)
+finaldata[, CF_NET_index := cumsum(CF_NET_index), .(Year, Month)]
+
+# sort dividend and label it from largest to smallest 
+setorderv(finaldata, cols = c("Year",  "Month", "dvt"), order = -1, na.last = T)
+finaldata[, dvt_index := cumsum(dvt_index), .(Year, Month)]
+
+# sort revenue and label it from largest to smallest
+setorderv(finaldata, cols = c("Year","Month","revt"), order = -1, na.last = T)
+finaldata[, revt_index := cumsum(revt_index), .(Year, Month)]
+
+# sort employment and label it from largest to smallest 
+setorderv(finaldata, cols = c("Year","Month","emp"), order = -1, na.last = T)
+finaldata[, emp_index := cumsum(emp_index), .(Year, Month)]
+
+# sort sales and label it from largest to smallest
+setorderv(finaldata, cols = c("Year","Month","sale"), order = -1, na.last = T)
+finaldata[, sale_index := cumsum(sale_index), .(Year, Month)]
+#####################################################################################
