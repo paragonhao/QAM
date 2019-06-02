@@ -227,8 +227,103 @@ setorderv(finaldata_dec, cols = c("Year","Month","emp"), order = -1, na.last = T
 finaldata_dec[, emp_index := cumsum(emp_index), .(Year, Month)]
 #####################################################################################
 
+################################## find the fundamental weights ###################################
+# select top 1000 stock and make sure the BE value is higher than 0
+setorder(finaldata, Year, Month)
+setorder(finaldata_dec, Year)
+finaldata_dec <- finaldata_dec[,.(PERMCO, Year, BE_index, T5yrAvgCF_index, T5yrAvgRev_index, 
+                                  T5yrAvgSale_index, T5yrAvgDvt_index, emp_index)]
+merged_fundamentals <- merge(finaldata, finaldata_dec, by = c("PERMCO","Year"), all.x = T, allow.cartesian = T)
+
+# 1 book value
+bvTop1000 <- merged_fundamentals[ BE_index <= 1000 & BE > 0]
+bvTop1000[, c("BE_rank","lagged_Mktcap") := .(shift(BE_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
+
+bvTop1000 <- bvTop1000[lagged_Mktcap != 0]
+bvTop1000 <- bvTop1000[!is.na(BE_rank) & !is.na(lagged_Mktcap)]
+
+bvTop1000_portfolio <- bvTop1000[,.(BV_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
+
+setkey(bvTop1000_portfolio, Year, Month)
+
+prod(bvTop1000_portfolio$BV_Ret + 1) ^ (1/(length(bvTop1000_portfolio$BV_Ret)/12)) -1
+sd(bvTop1000_portfolio$BV_Ret) * sqrt(12)
+#####
+
+# 2 income
+cfTop1000 <- merged_fundamentals[ T5yrAvgCF_index <= 1000 & CF_NET >0 ]
+cfTop1000[, c("CF_rank","lagged_Mktcap") := .(shift(T5yrAvgCF_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
+
+cfTop1000 <- cfTop1000[lagged_Mktcap != 0]
+cfTop1000 <- cfTop1000[!is.na(CF_rank) & !is.na(lagged_Mktcap)]
+cfTop1000_portfolio <- cfTop1000[,.(CF_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
+
+setkey(cfTop1000_portfolio, Year, Month)
+
+prod(cfTop1000_portfolio$CF_Ret + 1) ^ (1/(length(cfTop1000_portfolio$CF_Ret)/12)) -1
+sd(cfTop1000_portfolio$CF_Ret) * sqrt(12)
+#####
+
+# 3 Revenue 
+RevTop1000 <- merged_fundamentals[ T5yrAvgRev_index <= 1000 ]
+RevTop1000[, c("Rev_rank","lagged_Mktcap") := .(shift(T5yrAvgRev_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
+
+RevTop1000 <- RevTop1000[lagged_Mktcap != 0]
+RevTop1000 <- RevTop1000[!is.na(Rev_rank) & !is.na(lagged_Mktcap)]
+RevTop1000_portfolio <- RevTop1000[,.(Rev_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
+
+setkey(RevTop1000_portfolio, Year, Month)
+
+prod(RevTop1000_portfolio$Rev_Ret + 1) ^ (1/(length(RevTop1000_portfolio$Rev_Ret)/12)) -1
+sd(RevTop1000_portfolio$Rev_Ret) * sqrt(12)
+####
+
+# 4 Dividend
+DvtTop1000 <- merged_fundamentals[ T5yrAvgDvt_index <= 1000 ]
+DvtTop1000[, c("Dvt_rank","lagged_Mktcap") := .(shift(T5yrAvgDvt_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
+
+DvtTop1000 <- DvtTop1000[lagged_Mktcap != 0]
+DvtTop1000 <- DvtTop1000[!is.na(Dvt_rank) & !is.na(lagged_Mktcap)]
+DvtTop1000_portfolio <- DvtTop1000[,.(Dvt_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
+
+setkey(DvtTop1000_portfolio, Year, Month)
+
+prod(DvtTop1000_portfolio$Dvt_Ret + 1) ^ (1/(length(DvtTop1000_portfolio$Dvt_Ret)/12)) -1
+sd(DvtTop1000_portfolio$Dvt_Ret) * sqrt(12)
+####
+
+# 5 sale
+SaleTop1000 <- merged_fundamentals[ T5yrAvgSale_index <= 1000 ]
+SaleTop1000[, c("Sale_rank","lagged_Mktcap") := .(shift(T5yrAvgSale_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
+
+SaleTop1000 <- SaleTop1000[lagged_Mktcap != 0]
+SaleTop1000 <- SaleTop1000[!is.na(Sale_rank) & !is.na(lagged_Mktcap)]
+SaleTop1000_portfolio <- SaleTop1000[,.(Sale_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
+
+setkey(SaleTop1000_portfolio, Year, Month)
+
+prod(SaleTop1000_portfolio$Sale_Ret + 1) ^ (1/(length(SaleTop1000_portfolio$Sale_Ret)/12)) -1
+sd(SaleTop1000_portfolio$Sale_Ret) * sqrt(12)
+####
+
+# 6 Employment 
+EmpTop1000 <- merged_fundamentals[ emp_index <= 1000 ]
+EmpTop1000[, c("Emp_rank","lagged_Mktcap") := .(shift(emp_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
+
+EmpTop1000 <- EmpTop1000[lagged_Mktcap != 0]
+EmpTop1000 <- EmpTop1000[!is.na(Emp_rank) & !is.na(lagged_Mktcap)]
+EmpTop1000_portfolio <- EmpTop1000[,.(Emp_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
+
+setkey(EmpTop1000_portfolio, Year, Month)
+
+prod(EmpTop1000_portfolio$Emp_Ret + 1) ^ (1/(length(EmpTop1000_portfolio$Emp_Ret)/12)) -1
+sd(EmpTop1000_portfolio$Emp_Ret) * sqrt(12)
+####
 
 
 
 
+
+
+#####################################################################################
 
