@@ -173,7 +173,7 @@ write.table(finaldata, file ="final_data.csv", row.names=FALSE, sep=",")
 # In short: A PERMCO can have multiple PERMNOs
 rm(list=ls())
 finaldata<- as.data.table(read.csv("final_data.csv"))
-setorder(finaldata, Year, Month)
+setorder(finaldata, PERMCO, Year, Month)
 finaldata_dec <- finaldata[Month==12,]
 
 finaldata_dec[, T5yrAvgCF := rollapply(CF_NET, 5, 
@@ -236,8 +236,10 @@ finaldata_TTMs <- finaldata_dec[,.(PERMCO, Year, BE_index, T5yrAvgCF_index, T5yr
                                   T5yrAvgSale, T5yrAvgDvt, emp_index)]
 merged_fundamentals <- merge(finaldata, finaldata_TTMs, by = c("PERMCO","Year"), all.x = T, allow.cartesian = T)
 merged_fundamentals <- merged_fundamentals[Year>1961,]
-  
-bvTop1000 <- merged_fundamentals[ BE_index <= 1000 & BE > 0]
+
+setorder(merged_fundamentals, PERMNO, Year, Month)
+
+bvTop1000 <- merged_fundamentals[BE_index <= 1000 & BE > 0]
 bvTop1000[, c("BE_rank","lagged_BE") := .(shift(BE_index, 12), shift(BE, 12)), .(PERMNO)] 
 
 bvTop1000 <- bvTop1000[lagged_BE != 0]
@@ -254,8 +256,10 @@ sd(bvTop1000_portfolio$BV_Ret) * sqrt(12)
 
 #####
 # 2 income
+setorder(merged_fundamentals, PERMNO, Year, Month)
+
 cfTop1000 <- merged_fundamentals[T5yrAvgCF_index <= 1000 & CF_NET >0]
-cfTop1000[, c("CF_rank","lagged_T5yrAvgCF") := .(shift(T5yrAvgCF_index,12), shift(T5yrAvgCF,12)), .(PERMNO)] 
+cfTop1000[, c("CF_rank","lagged_T5yrAvgCF") := .(shift(T5yrAvgCF_index, 12), shift(T5yrAvgCF,12)), .(PERMNO)] 
 
 cfTop1000 <- cfTop1000[lagged_T5yrAvgCF != 0]
 cfTop1000 <- cfTop1000[!is.na(CF_rank) & !is.na(lagged_T5yrAvgCF)]
@@ -272,7 +276,7 @@ sd(cfTop1000_portfolio$CF_Ret) * sqrt(12)
 #####
 # 3 Revenue
 RevTop1000 <- merged_fundamentals[ T5yrAvgRev_index <= 1000 ]
-RevTop1000[, c("Rev_rank","lagged_T5yrAvgRev") := .(shift(T5yrAvgRev_index,12), shift(T5yrAvgRev, 12)), .(PERMNO)]
+RevTop1000[, c("Rev_rank","lagged_T5yrAvgRev") := .(shift(T5yrAvgRev_index,4), shift(T5yrAvgRev, 4)), .(PERMNO)]
 
 RevTop1000 <- RevTop1000[lagged_T5yrAvgRev != 0]
 RevTop1000 <- RevTop1000[!is.na(Rev_rank) & !is.na(lagged_T5yrAvgRev)]
@@ -289,7 +293,7 @@ sd(RevTop1000_portfolio$Rev_Ret) * sqrt(12)
 
 # 4 Dividend
 DvtTop1000 <- merged_fundamentals[T5yrAvgDvt_index <= 1000 ]
-DvtTop1000[, c("Dvt_rank","lagged_T5yrAvgDvt") := .(shift(T5yrAvgDvt_index,12), shift(T5yrAvgDvt,12)), .(PERMNO)]
+DvtTop1000[, c("Dvt_rank","lagged_T5yrAvgDvt") := .(shift(T5yrAvgDvt_index,4), shift(T5yrAvgDvt,4)), .(PERMNO)]
 
 DvtTop1000 <- DvtTop1000[lagged_T5yrAvgDvt != 0]
 DvtTop1000 <- DvtTop1000[!is.na(Dvt_rank) & !is.na(lagged_T5yrAvgDvt)]
@@ -306,7 +310,7 @@ sd(DvtTop1000_portfolio$Dvt_Ret) * sqrt(12)
 
 # 5 sale
 SaleTop1000 <- merged_fundamentals[ T5yrAvgSale_index <= 1000 ]
-SaleTop1000[, c("Sale_rank","lagged_T5yrAvgSale") := .(shift(T5yrAvgSale_index, 12), shift(T5yrAvgSale, 12)), .(PERMNO)]
+SaleTop1000[, c("Sale_rank","lagged_T5yrAvgSale") := .(shift(T5yrAvgSale_index, 4), shift(T5yrAvgSale, 4)), .(PERMNO)]
 
 SaleTop1000 <- SaleTop1000[lagged_T5yrAvgSale != 0]
 SaleTop1000 <- SaleTop1000[!is.na(Sale_rank) & !is.na(lagged_T5yrAvgSale)]
@@ -320,7 +324,7 @@ sd(SaleTop1000_portfolio$Sale_Ret) * sqrt(12)
 
 # 6 Employment
 EmpTop1000 <- merged_fundamentals[ emp_index <= 1000 ]
-EmpTop1000[, c("Emp_rank","lagged_emp") := .(shift(emp_index, 12), shift(emp, 12)), .(PERMNO)]
+EmpTop1000[, c("Emp_rank","lagged_emp") := .(shift(emp_index, 4), shift(emp, 4)), .(PERMNO)]
 
 EmpTop1000 <- EmpTop1000[lagged_emp != 0]
 EmpTop1000 <- EmpTop1000[!is.na(Emp_rank) & !is.na(lagged_emp)]
@@ -343,18 +347,59 @@ setorder(cfTop1000_premerge, Year, Month)
 setorder(DvtTop1000_premerge, Year, Month)
 setorder(RevTop1000_premerge, Year, Month)
 
-bv_cf <- merge(bvTop1000_premerge, cfTop1000_premerge, by = c("PERMCO", "Year", "Month"),  allow.cartesian = T)
-bv_cf_Dvt <- merge(bv_cf, DvtTop1000_premerge, by = c("PERMCO", "Year", "Month"),  allow.cartesian = T)
-bv_cf_Dvt_rev <-  merge(bv_cf_Dvt, RevTop1000_premerge, by = c("PERMCO", "Year", "Month","Ret"),  allow.cartesian = T)
+bv_cf <- merge(bvTop1000_premerge, cfTop1000_premerge, by = c("PERMCO", "Year", "Month"), all=T, allow.cartesian = T)
+bv_cf_Dvt <- merge(bv_cf, DvtTop1000_premerge, by = c("PERMCO", "Year", "Month"),  all=T,  allow.cartesian = T)
+bv_cf_Dvt_rev <-  merge(bv_cf_Dvt, RevTop1000_premerge,  all=T, by = c("PERMCO", "Year", "Month","Ret"),  allow.cartesian = T)
+
 setorder(bv_cf_Dvt_rev, Year, Month)
-bv_cf_Dvt_rev[,composite_weight := mean(CF_Weight + Dvt_Weight + Rev_Weight + BV_Weight)]
+bv_cf_Dvt_rev[,composite_weight := mean(CF_Weight + Dvt_Weight + Rev_Weight + BV_Weight, na.rm = T)]
 composite_portfolio <- bv_cf_Dvt_rev[,.(Composite_Ret = weighted.mean(Ret, composite_weight, na.rm = TRUE)), .(Year, Month)]
 
 prod(composite_portfolio$Composite_Ret + 1) ^ (1/(length(composite_portfolio$Composite_Ret)/12)) -1
-
+sd(composite_portfolio$Composite_Ret) * sqrt(12)
 #####
+# Reference 
+# select the top 1000 stocks based on cap and value weight them to form the portfolio
+
+# sort mkt cap and label it from largest to smallest (1 to 1000)
+setorder(finaldata, Year, Month)
+reference_dec <- finaldata[Month==12,]
+
+reference_dec <- reference_dec[, mktCap_index := 1]
+
+# sort Mkt cap and label it from largest to smallest (1 to 1000)
+setorderv(reference_dec, cols = c("Year", "Mkt_cap"), order =-1, na.last = T)
+reference_dec[, mktCap_index := cumsum(mktCap_index), .(Year, Month)]
+
+setorder(finaldata, Year, Month)
+setorder(reference_dec, Year)
+
+reference_dec <- reference_dec[, .(PERMCO, Year, mktCap_index)]
+reference_trim <- finaldata[, .(PERMNO, PERMCO, Ret,Year, Month, Mkt_cap)]
+
+merged_reference <- merge(reference_trim, reference_dec, by = c("PERMCO","Year"), all.x = T, allow.cartesian = T)
+merged_reference  <- merged_reference[Year>1961,]
+
+setorder(merged_reference, PERMNO, Year, Month)
+
+capTop1000 <- merged_reference[ mktCap_index <= 1000 & Mkt_cap > 0]
+capTop1000[, c("mktCap_rank","lagged_MktCap") := .(shift(mktCap_index, 12), shift(Mkt_cap, 12)), .(PERMNO)]
+
+capTop1000 <- capTop1000[lagged_MktCap != 0]
+capTop1000 <- capTop1000[!is.na(mktCap_rank) & !is.na(lagged_MktCap)]
+
+capTop1000_portfolio <- capTop1000[,.(vw_Ret = weighted.mean(Ret, lagged_MktCap, na.rm = TRUE)), .(Year, Month)]
+
+setkey(capTop1000_portfolio, Year, Month)
+
+prod(capTop1000_portfolio$vw_Ret + 1) ^ (1/(length(capTop1000_portfolio$vw_Ret)/12)) -1
+sd(capTop1000_portfolio$vw_Ret) * sqrt(12)
+#########
 
 
+#####################################################################################
+
+### side note: 
 # cap weighted after sorting example , the return is not necessarily higher, in fact its about the same
 # # 3 Revenue 
 # RevTop1000 <- merged_fundamentals[ T5yrAvgRev_index <= 1000 ]
@@ -413,9 +458,3 @@ prod(composite_portfolio$Composite_Ret + 1) ^ (1/(length(composite_portfolio$Com
 # ####
 # 
 # 
-
-
-
-
-#####################################################################################
-
