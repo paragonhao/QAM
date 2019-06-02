@@ -1,5 +1,6 @@
 suppressMessages(require(data.table))
 suppressMessages(require(lubridate))
+suppressWarnings(require(zoo))
 suppressWarnings(require(dplyr))
 rm(list=ls())
 
@@ -162,37 +163,72 @@ setorder(finaldata, date)
 finaldata[, Year:= year(date)]
 finaldata[, Month:= month(date)]
 finaldata <- finaldata[Year < 2018,]
-# #####################################################################################
-# 
-# ################################ sorting the 1000 largest stocks based on each metrics ####################################
-# finaldata[, BE_index := 1]
-# finaldata[, CF_NET_index := 1]
-# finaldata[, dvt_index := 1]
-# finaldata[, revt_index := 1]
-# finaldata[, emp_index := 1]
-# finaldata[, sale_index := 1]
-# 
-# # sort BE and label it from largest to smallest (1 to 1000)
-# setorderv(finaldata, cols = c("Year", "Month", "BE"), order =-1, na.last = T)
-# finaldata[, BE_index := cumsum(BE_index), .(Year, Month)]
-# 
-# # sort Cash flow and label it from largest to smallest (1 to 1000)
-# setorderv(finaldata, cols = c("Year", "Month", "CF_NET"), order =-1, na.last = T)
-# finaldata[, CF_NET_index := cumsum(CF_NET_index), .(Year, Month)]
-# 
-# # sort dividend and label it from largest to smallest 
-# setorderv(finaldata, cols = c("Year",  "Month", "dvt"), order = -1, na.last = T)
-# finaldata[, dvt_index := cumsum(dvt_index), .(Year, Month)]
-# 
-# # sort revenue and label it from largest to smallest
-# setorderv(finaldata, cols = c("Year","Month","revt"), order = -1, na.last = T)
-# finaldata[, revt_index := cumsum(revt_index), .(Year, Month)]
-# 
-# # sort employment and label it from largest to smallest 
-# setorderv(finaldata, cols = c("Year","Month","emp"), order = -1, na.last = T)
-# finaldata[, emp_index := cumsum(emp_index), .(Year, Month)]
-# 
-# # sort sales and label it from largest to smallest
-# setorderv(finaldata, cols = c("Year","Month","sale"), order = -1, na.last = T)
-# finaldata[, sale_index := cumsum(sale_index), .(Year, Month)]
-# #####################################################################################
+write.table(finaldata, file ="final_data.csv", row.names=FALSE, sep=",")
+#####################################################################################
+
+################################## find the trailing data ###################################
+# PERMCO is a unique permanent identifier assigned by CRSP to all companies with issues on a CRSP file. 
+# This number is permanent for all securities issued by this company regardless of name changes.
+# The PERMNO identifies a firm's security through all its history, and companies may have several stocks at one time.
+# In short: A PERMCO can have multiple PERMNOs
+rm(list=ls())
+finaldata<- as.data.table(read.csv("final_data.csv"))
+setorder(finaldata, Year, Month)
+finaldata_dec <- finaldata[Month==12,]
+
+finaldata_dec[, T5yrAvgCF := rollapply(CF_NET, 5, 
+                                     function(x){ mean(x, na.rm = T)}, fill=NA, 
+                                     align="right", partial = T), by = c("PERMCO")]
+
+finaldata_dec[, T5yrAvgRev := rollapply(revt, 5, 
+                                     function(x){ mean(x, na.rm = T)}, fill=NA, 
+                                     align="right", partial = T), by = c("PERMCO")]
+
+finaldata_dec[, T5yrAvgSale := rollapply(sale, 5, 
+                                        function(x){ mean(x, na.rm = T)}, fill=NA, 
+                                        align="right", partial = T), by = c("PERMCO")]
+
+finaldata_dec[, T5yrAvgDvt := rollapply(dvt, 5, 
+                                         function(x){ mean(x, na.rm = T)}, fill=NA, 
+                                         align="right", partial = T), by = c("PERMCO")]
+#####################################################################################
+
+
+################################ sorting the 1000 largest stocks based on each metrics ####################################
+finaldata_dec[, BE_index := 1]
+finaldata_dec[, T5yrAvgCF_index := 1]
+finaldata_dec[, T5yrAvgRev_index := 1]
+finaldata_dec[, T5yrAvgSale_index := 1]
+finaldata_dec[, T5yrAvgDvt_index := 1]
+finaldata_dec[, emp_index := 1]
+
+# sort BE and label it from largest to smallest (1 to 1000)
+setorderv(finaldata_dec, cols = c("Year", "Month", "BE"), order =-1, na.last = T)
+finaldata_dec[, BE_index := cumsum(BE_index), .(Year, Month)]
+
+# sort trailing 5 year average Cash flow and label it from largest to smallest (1 to 1000)
+setorderv(finaldata_dec, cols = c("Year", "Month", "T5yrAvgCF"), order =-1, na.last = T)
+finaldata_dec[, T5yrAvgCF_index := cumsum(T5yrAvgCF_index), .(Year, Month)]
+
+# sort revenue and label it from largest to smallest 
+setorderv(finaldata_dec, cols = c("Year",  "Month", "T5yrAvgRev"), order = -1, na.last = T)
+finaldata_dec[, T5yrAvgRev_index := cumsum(T5yrAvgRev_index), .(Year, Month)]
+
+# sort revenue and label it from largest to smallest
+setorderv(finaldata_dec, cols = c("Year","Month","T5yrAvgSale"), order = -1, na.last = T)
+finaldata_dec[, T5yrAvgSale_index := cumsum(T5yrAvgSale_index), .(Year, Month)]
+
+# sort sales and label it from largest to smallest
+setorderv(finaldata_dec, cols = c("Year","Month","T5yrAvgDvt"), order = -1, na.last = T)
+finaldata_dec[, T5yrAvgDvt_index := cumsum(T5yrAvgDvt_index), .(Year, Month)]
+
+# sort employment and label it from largest to smallest 
+setorderv(finaldata_dec, cols = c("Year","Month","emp"), order = -1, na.last = T)
+finaldata_dec[, emp_index := cumsum(emp_index), .(Year, Month)]
+#####################################################################################
+
+
+
+
+
+
