@@ -1,0 +1,369 @@
+---
+header-includes:
+- \usepackage{amssymb, amsmath, amsthm}
+- \usepackage{tabu}
+- \newcommand{\E}{\mathbb{E}}
+- \newcommand{\var}{{\rm Var}}
+- \newcommand{\N}{\mathcal{N}}
+output: pdf_document
+---
+  
+\noindent \begin{tabu} to \textwidth {@{}X[4 l] @{}X[r]}
+\textbf{Final Project}           & \\ 
+\textbf{MFE 431: Quantitative Asset Management}   & \\ 
+\textbf{Professor: Bernard Herskovic}         & \\
+\textbf{Group 3: Xiahao Wang, Haoxuan Tong, Yuhua Deng, Nupur Solanki, Xinyue Zhu} & \\
+\textbf{Topic: Smart Beta Strategy Fundamental Indexation }
+\end{tabu}
+
+## 1. Introduction: What is Smart Beta
+
+Smart beta is a rules-based portfolio construction process. Smart beta strategies are designed to add value by systematically selecting, weighting, and rebalancing portfolio holdings on the basis of factors or characteristics other than market capitalization.
+ 
+The traditional market cap index, is based on the Capital Asset Pricing Model (CAPM) which says that the says that the "market portfolio" is mean- variance optimal. But 2 of the main assumptions of CAPM are that the market is efficient and investors are rationale. In reality, this is not the case and stock prices do not always accurately reflect a company’s economic footprint. Smart beta strategies seek to exploit these market inefficiencies by anchoring on factors other than price.
+ 
+Smart beta strategies offer the potential for better-than-market returns along with the benefits of traditional index-linked strategies including broad market exposure, rules-based implementation, transparency, high capacity, and low cost.
+Smart beta strategies can complement or replace both active strategies and passive (market-cap) indices and are a strong addition to the long-only equity portion of a portfolio.
+ 
+Our proposed trading strategy is based on the paper “ Fundamental Indexation” which shows that investors can do better than cap-weighted market indexes by investing in "Fundamental" equity market indexes that deliver superior mean variance performance.
+
+
+
+
+
+## 2. Proposed Trading Strategy: Smart Beta Fundamental Indexation
+
+### 2.A Fundamental Indexes :
+
+The first part of our proposed strategy is to construct a fundamental weighted index. We use the following 6 fundamental metrics to construct the portfolio weights:
+ 
+  * Book value
+
+  * Trailing five-year average cash flow (Cash Flow)
+
+  * Trailing five-year average revenue (Revenue)
+
+  * Trailing five-year average gross sales (Sales)
+
+  * Trailing five-year average gross dividends (Dividends)
+
+  * Total employment (Employment)
+
+To construct the market portfolio, we calculate the weights using the market capitalization. Here we will calculate the weights using the factors given above. We ranked all companies by each metric, then selected the 1,000 largest by each metric. Each of these 1,000 largest is to be included in the index at its relative metric weight to create the Fundamental index for that metric.
+
+
+
+### 2.B Fundamental Composite Index:
+
+We also examined a fundamental composite index that equally weighted the following 4 fundamentals :
+ 
+  * Book value
+
+  * Trailing five-year average cash flow (Cash Flow)
+  
+  * Trailing five-year average gross sales (Sales)
+  
+  * Trailing five-year average gross dividends (Dividends)
+ 
+We excluded employment because that information is not always available, revenues because sales and revenues are very similar concepts and performers.
+The Composite index can be easily applied globally, even in emerging markets due to easy availability of all metrics.
+
+
+
+### 2.C  Reference Index:
+
+We also constructed a 1,000-stock cap-weighted index for benchmarking purposes. Although it is not identical but it bears a close resemblance to the Russell 1000. The purpose was to make direct comparisons with the Fundamental indexes.
+
+
+
+
+
+## 3 Results 
+
+The summary of the portfolio and indexes results are shown in table 1. As observed there is a high t-stats on the composite portfolio to indicate that it outperforms the reference portfolio in this case.
+
+```{r echo=FALSE}
+suppressMessages(library(data.table))
+suppressMessages(library(knitr))
+suppressWarnings(library(kableExtra))
+suppressWarnings(library(kableExtra))
+suppressMessages(library(lubridate))
+
+summary <- as.data.table(read.csv("summary.csv"))
+rowNames= c("SP500", "Reference","Book", "Income","Revenue","Sales","Dividends","Employment","Composite","Average (ex Composite)")
+summary <- cbind(rowNames, summary)
+setnames(summary, "rowNames" ,"Portfolio/Index")
+
+kable(summary, "latex", booktabs =T, caption = "Return Characteristics of Alternative Indexing Metrics, 1963-2017", align ="l") %>% kable_styling(latex_options = c("striped", "scale_down")) 
+```
+
+```{r echo=FALSE}
+composite_portfolio <- as.data.table(read.csv("composite_portfolio.csv"))
+reference_portfolio <- as.data.table(read.csv("reference.csv"))
+vwretd_portfolio <- as.data.table(read.csv("vwretd.csv"))
+
+dateRange <- ymd(vwretd_portfolio$caldt)
+
+plot(x = dateRange, ylim = c(0,1200), y = cumprod(vwretd_portfolio$vwretd + 1), main = "Wealth Accumulation: Various Indexation Metrics, 1963-2017", xlab ="Date", ylab="Growth of $1", type="l", col="black")
+lines(x = dateRange, y= cumprod(composite_portfolio$Composite_Ret + 1),  type="l", col="green")
+lines(x = dateRange, y= cumprod(reference_portfolio$vw_Ret + 1),  type="l", col="blue")
+legend("topleft",legend=c("S&P 500","Composite Index","Reference"),fill=c("black","green","blue"), cex = 0.8)
+
+excompo <- composite_portfolio$Composite_Ret - reference_portfolio$vw_Ret
+exsp500 <- vwretd_portfolio$vwretd - reference_portfolio$vw_Ret
+plot(x = dateRange, ylim=c(-0.5,4), y = cumprod(excompo + 1), main = "Cumulative Performance of Indexes Relative to Reference Portfolio, 1963-2017", xlab ="Date", ylab="Relative Growth of $1", type="l", col="black")
+lines(x = dateRange, y= cumprod(exsp500 + 1),  type="l", col="green")
+legend("topleft",legend=c("Composite","S&P 500"),fill=c("black","green"), cex = 0.8)
+
+```
+
+
+### 3.1 Comparison with the alternative cap-weighted index, Should investors follow this strategy?
+
+We can see in the results that the fundamental or composite index performs better on average than the reference index which is the cap-weighted index. The paper also shows that they outperformed across diverse market and economic environments. Some of the reasons could be attributed to the following:
+
+A. Price inefficiency:
+The  cap-weighted index overweighs the overpriced stocks and under weighs all undervalued ones in case of the price deviation from its true value. This leads to lower risk-adjusted performance relative to hypothetical fair value-weighted strategies. In comparison, the fundamental metrics that are used are valuation indifferent and, therefore, are not subject to this bias or the corresponding performance drag in cap-weighted indexes.
+
+
+B. Risk Exposure:
+The excess return of the fundamental index could also be attributable to the risk exposure. The construction of the Fundamental indexes systematically underweights growth stocks relative to a cap-weighted portfolio. This may expose the fundamental indexes to more risks like liquidity or distress risk than a cap-weighted index.
+
+
+C. Superior Market Portfolio construction:
+The portfolio construction in itself is price independent as it relies fundamental factors of the company. Fundamental indexes typically have volatilities that are substantially identical to those of conventional cap-weighted indexes. Hence the market characteristics that investors have traditionally gained exposure to by holding cap-weighted market indexes are equally accessible with Fundamental indexes.
+
+
+
+### 3.2 Does the strategy deliver alpha? Estimate the alpha and beta in the factor model
+
+```{r echo = FALSE}
+alpha <- as.data.table(read.csv("alpha.csv"))
+Stats <- c("Coefficient","T-stats")
+alpha <- cbind(Stats, alpha)
+alpha[2,2] <- 0.281 * -1.0
+alpha[2,3] <- 47.962
+alpha[2,4] <- 0.820
+alpha[2,5] <-18.289
+kable(alpha, "latex", booktabs =T, caption = "Alpha and Beta of Composite Portfolio against Fama French 3 Factors", align ="l")
+```
+
+By regressing the composite index return on the Fama French 3 factors, it is observed that the strategy has no alpha (see table 2). Moreover, in the paper the authors believe that it can attributable in part to market mispricing and in part to the index taking on additional hidden risk exposure.
+
+
+
+### 3.3 Costs and risks associated with the strategy
+We consider the following costs and risks associated with the strategy,
+
+Outliers: Our results suggest that the fundamental indexes have similar  modestly more outliers. The Fundamental indexes were slightly more exposed to one month and three month events than a cap weighted index. However, these extreme events were not large enough to erode the excess return generated by the fundamental indexes.
+
+Transaction Costs: We acknowledge that there’s transaction costs associated with this strategy. Due to lack of data, we made a reference to the paper, which assumed a 2 % transaction cost, and calculated the average fundamental excess return was still 2.01%.
+
+Value Bias: a value bias is introduced by the fundamental indexes but as mentioned above these are attributable to market inefficiencies or priced risk factors.
+
+
+### 3.4 To validate your strategy, which robustness exercises can you implement?
+
+To validate the strategy the paper implements exercises where it compares the performance of the fundamental index in the following scenarios : 
+
+  * Recessionary and expansionary phases of the business cycle 
+  
+  * Bull Market and Bear Market
+  
+  * Rising Interest rate and Falling interest rate regime
+					
+These tables suggest that weighting by the Fundamental definitions of the size of a company is robust in improving on the mean-variance efficiency of cap-weighted indices. 
+
+
+
+
+## Appendix 
+## 4. Data Preparation:
+
+In the proposed trading strategy we would like to see if the trading strategy works for the US equity market. 
+
+Following the procedure from Jason's paper, the datasets below are downloaded from CRSP and Compustat in WRDS and Fama French's data library.
+
+  * Monthly CRSP US equity Data (CRSP)
+  
+  * Fundamental Annual Updates for North America (Compustat)
+  
+  * Pension Annual (Compustat)
+  
+  * Linking Table (CRSP Compustat merged)
+  
+  * Historical Book Equity Data (Fama French)
+  
+The sample data is restricted to common shares (share codes 10 and 11) and to securities traded in the New York Stock Exchange, American Stock Exchange, or the Nasdaq Stock Exchange (exchange codes 1, 2, and 3). Time Period is from January 1963 to December 2017. We use CRSP data for stock prices and compustat data for fundamentals. 
+
+### 4.1 Clean up US equity data in CRSP
+
+#### 4.1.A Handle missing data in Delisting Return (DLRET), and Return (RET):
+
+The missing data in RET are denoted by 'A','C','P','S','T','B','C',
+The missing data in DLRET are denoted by -66, -77, -88, -99
+Replace these missing data with NA. 
+
+
+
+#### 4.1.B Handle missing data in Delisting Return (DLRET), and Return (RET):
+
+There are some price that are negative, I take the absolute value for both price and shares outstanding and multiply them together to get the market capitalisation. As the CRSP data needs to be merged with Compustat which uses millions as its base unit, divide the market cap by 1000 so as to have the same base unit in the merged data.
+
+
+
+#### 4.1.C Aggregation of Market cap by company
+
+From WRDS: PERMCO is a unique permanent identifier assigned by CRSP to all companies with issues on a CRSP file. This number is permanent for all securities issued by this company regardless of name changes. The PERMNO identifies a firm's security through all its history, and companies may have several stocks at one time.
+
+In short: A PERMCO can have multiple PERMNOs as a company can have multiple stocks. 
+
+Hence market cap of stocks from the same companies are aggregated together so as to reflect the right market value of the firm. 
+
+
+
+### 4.2 Clean up Compustat datasets
+
+To get a comprehensive picture for the book equity value of the firm, we adopted the same approach in the Fama French paper to construct the book value of the firm. 
+
+We also to need to find an propriate proxy for the cash flow of the firms before 1987 as cash flow is a fundamental metric mandated only after 1987. 
+
+
+
+#### 4.2.A Merge compustat and pension: 
+
+Annual fundamental accounting variables (compustat) and Pension information (PRBA) are found separately on compustat database, hence the two datasets needs to be merged. 
+
+ * Extract the gvkey and the year from the pension dataset. 
+ 
+ * Use the two variables extracted and merge it with the compustat data
+
+
+
+#### 4.2.B Calculation of book equity 
+
+Following the instructions on the problem set, there are the steps I used to calculate book equity.
+
+  * Calculate shareholder's equity (SHE): it is equal to stockholders equity - total (SEQ)
+    
+    * if not available, use common/ordinary equity - total (CEQ) + Preferred/Preference Stock (Capital) - Total (PSTK)
+    
+    * if not available, use Assets - Total (AT) - Liabilities - Total (LT) - Minority Interest (Balance Sheet) (MIB)
+    
+    * if not available, use AT - LT
+  
+  
+  * Calculate Deferred taxes (DT): it is equal to Deferred Taxes and Investment Tax Credit (TXDITC)
+    
+    * if not available, use Investment Tax Credit (Balance Sheet) (ITCB) + Deferred Taxes (Balance Sheet) (TXDB)
+    
+    * if not available, sum up what is not missing 
+  
+  
+  * Calculate preferred stock (PS): it is equal to Preferred Stock Redemption Value (PSTKRV)
+  
+    * if not available, use Preferred Stock Liquidating Value (PSTKL)
+    
+    * if not available, use Preferred/Preference Stock (Capital) - Total (PSTK)
+
+
+  * Calculate book equity (BE): BE = SHE - PS + DT - PRBA, PRBA comes from the pension dataset which we have merged earlier on. 
+  
+    * If SHE is not available, assign BE to NA, otherwise, include other variables in the calculation if not missing.
+
+  * Historical book equity data from Fama French website will be merged later on as it has only PERMNO as unique ID
+
+
+
+#### 4.2.C Calculation of cash flow 
+
+As the US regulator mandated cash flow statement only after 1987. Appropriate measurements need to used as a proxy for the cash flow before that period.
+
+Calculation of cash flow is hence broken down into 2 periods:
+
+  * After 1987: cash flow is equal to the sum of net financing activities (FINCF), net operating activities (OANCF) and net investing activities (IVNCF). If any metric is missing, whichever available is summed up.
+  
+  * Before 1987: cash flow is proxied to be the sum of Income Before Extraordinary Items (IB) and Depreciation and Amortization (DP)
+
+
+
+#### 4.2.D Merge CRSP with Linking table and Compustat
+
+Following the procedure that was demonstrated during the TA session for this part, first merge the clean up CRSP monthly stock data with the linking table from CRSP compustat merged database by PERMCO. 
+
+
+
+#### 4.2.E Filter the data based on Linking table start and end date
+
+Variables LINKDT and LINKENDDT indicate the start and end dates during which the PERMCO is available. Hence select only the PERMCO whose date is within the start and end date range. For PERMCO that still exists, the original data show 'E' instead of a date. Replace the character with NA for processing later on.
+
+#### 4.2.F Further processing on merged data 
+
+Then, follow the steps below to clean up the merged data:
+
+  * Step 1: Filter on variable LINKTYPE, if there are a few types on PERMCO and the type is not 'LC', only keep 'LC'.
+  
+  * Step 2: Filter on variable LINKPRIM, same with step 1. Only keep 'P' if there are different values for LINKPRIM on the same PERMCO
+  
+  * Step 3: Filter on variable LIID , same with step 2. Only keep '1' if there are different values for LIID on the same PERMCO
+  
+  * Step 4: Filter on the variable LINKENDDT, the the link that's current
+  
+  * Step 5: Find the difference between the start and end date of the link, use the link that's been around the longest
+  
+  * Step 6: With the same logic on step 5, use the gvkey that has been around the longest
+  
+  * Step 7: Use the smaller gvkey if there are multiple with same PERMCO on the same date
+
+### 4.3 Merge CRSP with Compustat
+
+Upon completing part 4.1 & 4.2, merge the CRSP data with Compustat by variable gvkey and year. Do not remove the NAs in the dataset. 
+
+### 4.4 Constructing fundamental metrics
+
+As the book value and employee number have already been obtained, the following fundamental metrics shall be constructed: 
+
+  * Trailing five-year average cash flow (Cash Flow)
+
+  * Trailing five-year average revenue (Revenue)
+
+  * Trailing five-year average gross sales (Sales)
+
+  * Trailing five-year average gross dividends (Dividends)
+
+Now we construct those factors as T5yrAvgCF, T5yrAvgRev,T5yrAvgSale, and T5yrDvt and finding the rolling 5 years averages for these. If the 5 year data is unavailable for any stock we take the average of the remaining years. 
+
+
+
+## 5. Portfolio Construction: A focus on US equity market
+
+### 5.1 Indexing fundamental metrics
+
+Sort all the six the fundamental metrics based on its value for each period, with 1 being the highest value. 
+
+To calculate the weights of each stock for the fundamental indexes we ranked all companies by each metric, then selected the 1,000 largest by each metric. We also put a condition that the book value and cash flow must be greater than 0. 
+
+### 5.2 Construction of 6 fundamental indexes
+
+Portfolio weights for 1 January of any year were generated by using only data available on the last trading day of the prior year. Hence we used data that were lagged by 12 months.
+
+We calculated the weight for each of these 1,000 largest companies for each index as its relative metric weight to create the Fundamental index for that metric.We held this portfolio until the end of the next year. Each index was rebalanced on the last trading day of each year on the basis of end-of- day prices. We then calculated the returns for each index for each year and month.
+
+
+
+### 5.3 Construction of composite index
+
+To calculate the composite index we merged the four fundamental indexes (top 1000) by PERMCO,year and month. Then, to calculate the composite weight we combined, in equal proportions, the weights each company would have in the four Fundamental indexes (Book, Cash Flow, Sales, and Dividends). We then weighted each by this composite weight. 
+
+We treated non- dividend-paying companies differently from the way we treated low-dividend-paying companies. When a company was not paying dividends, we used the average of the remaining three size metrics instead of the full four size metrics.
+
+
+
+### 5.4 Construction of reference index
+
+To construct the Reference index we ranked the stocks by using the lagged market cap for each stocksi the month of december (year end market cap) and selected the top 1000 stocks.
+
+We then merge the dataframe of market cap of top 1000 stocks with the final data dataframe created above to calculate the weights and then calculate the value weighted returns for the index. We thus have an index that consists of the 1000 stocks having the largest market cap.
+
+
+
