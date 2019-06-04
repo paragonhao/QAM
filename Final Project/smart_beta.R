@@ -2,6 +2,7 @@ suppressMessages(require(data.table))
 suppressMessages(require(lubridate))
 suppressWarnings(require(zoo))
 suppressWarnings(require(dplyr))
+suppressWarnings(require(moments))
 rm(list=ls())
 
 ########################## Cleaning up CRSP data ########################## 
@@ -81,7 +82,7 @@ compustat_merged[is.na(SHE), BE:=NA]
 compustat_merged[, CF_NET := coalesce(fincf + oancf + ivncf, 
                                       fincf + oancf, 
                                       fincf + ivncf, 
-                                      oancf + ivncf, fincf, oancf, ivncf)]
+                                      oancf + ivncf, ib + dp)]
 
 #####################################################################################
 
@@ -248,11 +249,7 @@ bvTop1000 <- bvTop1000[!is.na(BE_rank) & !is.na(lagged_BE)]
 bvTop1000[, BV_Weight := lagged_BE/sum(lagged_BE), .(Year, Month)]
 #bvTop1000_portfolio <- bvTop1000[,.(BV_Ret = weighted.mean(Ret, lagged_BE, na.rm = TRUE)), .(Year, Month)]
 bvTop1000_portfolio <- bvTop1000[,.(BV_Ret = sum(BV_Weight * Ret, na.rm = T)), .(Year, Month)] 
-
-setkey(bvTop1000_portfolio, Year, Month)
-
-prod(bvTop1000_portfolio$BV_Ret + 1) ^ (1/(length(bvTop1000_portfolio$BV_Ret)/12)) -1
-sd(bvTop1000_portfolio$BV_Ret) * sqrt(12)
+bvTop1000_portfolio <- bvTop1000_portfolio[Year >1962,]
 
 #####
 # 2 income
@@ -267,12 +264,7 @@ cfTop1000 <- cfTop1000[!is.na(CF_rank) & !is.na(lagged_T5yrAvgCF)]
 cfTop1000[, CF_Weight := lagged_T5yrAvgCF/sum(lagged_T5yrAvgCF), .(Year, Month)]
 #cfTop1000_portfolio <- cfTop1000[,.(CF_Ret = weighted.mean(Ret, lagged_T5yrAvgCF, na.rm = TRUE)), .(Year, Month)]
 cfTop1000_portfolio <- cfTop1000[,.(CF_Ret = sum(CF_Weight * Ret, na.rm = T)), .(Year, Month)] 
-
-setkey(cfTop1000_portfolio, Year, Month)
-
-prod(cfTop1000_portfolio$CF_Ret + 1) ^ (1/(length(cfTop1000_portfolio$CF_Ret)/12)) -1
-sd(cfTop1000_portfolio$CF_Ret) * sqrt(12)
-
+cfTop1000_portfolio <- cfTop1000_portfolio[Year >1962,]
 #####
 # 3 Revenue
 RevTop1000 <- merged_fundamentals[ T5yrAvgRev_index <= 1000 ]
@@ -284,11 +276,7 @@ RevTop1000 <- RevTop1000[!is.na(Rev_rank) & !is.na(lagged_T5yrAvgRev)]
 RevTop1000[, Rev_Weight := lagged_T5yrAvgRev/sum(lagged_T5yrAvgRev), .(Year, Month)]
 #RevTop1000_portfolio <- RevTop1000[,.(Rev_Ret = weighted.mean(Ret, lagged_T5yrAvgRev, na.rm = TRUE)), .(Year, Month)]
 RevTop1000_portfolio <- RevTop1000[,.(Rev_Ret = sum(Rev_Weight * Ret, na.rm = T)), .(Year, Month)]
-
-setkey(RevTop1000_portfolio, Year, Month)
-
-prod(RevTop1000_portfolio$Rev_Ret + 1) ^ (1/(length(RevTop1000_portfolio$Rev_Ret)/12)) -1
-sd(RevTop1000_portfolio$Rev_Ret) * sqrt(12)
+RevTop1000_portfolio <- RevTop1000_portfolio[Year >1962,]
 ####
 
 # 4 Dividend
@@ -301,11 +289,7 @@ DvtTop1000 <- DvtTop1000[!is.na(Dvt_rank) & !is.na(lagged_T5yrAvgDvt)]
 DvtTop1000[, Dvt_Weight := lagged_T5yrAvgDvt/sum(lagged_T5yrAvgDvt), .(Year, Month)]
 #DvtTop1000_portfolio <- DvtTop1000[,.(Dvt_Ret = weighted.mean(Ret, lagged_T5yrAvgDvt, na.rm = TRUE)), .(Year, Month)]
 DvtTop1000_portfolio <- DvtTop1000[,.(Dvt_Ret = sum(Dvt_Weight * Ret, na.rm = T)), .(Year, Month)]
-
-setkey(DvtTop1000_portfolio, Year, Month)
-
-prod(DvtTop1000_portfolio$Dvt_Ret + 1) ^ (1/(length(DvtTop1000_portfolio$Dvt_Ret)/12)) -1
-sd(DvtTop1000_portfolio$Dvt_Ret) * sqrt(12)
+DvtTop1000_portfolio <- DvtTop1000_portfolio[Year >1962,]
 ####
 
 # 5 sale
@@ -315,11 +299,8 @@ SaleTop1000[, c("Sale_rank","lagged_T5yrAvgSale") := .(shift(T5yrAvgSale_index, 
 SaleTop1000 <- SaleTop1000[lagged_T5yrAvgSale != 0]
 SaleTop1000 <- SaleTop1000[!is.na(Sale_rank) & !is.na(lagged_T5yrAvgSale)]
 SaleTop1000_portfolio <- SaleTop1000[,.(Sale_Ret = weighted.mean(Ret, lagged_T5yrAvgSale, na.rm = TRUE)), .(Year, Month)]
+SaleTop1000_portfolio <- SaleTop1000_portfolio[Year >1962,]
 
-setkey(SaleTop1000_portfolio, Year, Month)
-
-prod(SaleTop1000_portfolio$Sale_Ret + 1) ^ (1/(length(SaleTop1000_portfolio$Sale_Ret)/12)) -1
-sd(SaleTop1000_portfolio$Sale_Ret) * sqrt(12)
 ####
 
 # 6 Employment
@@ -329,14 +310,10 @@ EmpTop1000[, c("Emp_rank","lagged_emp") := .(shift(emp_index, 4), shift(emp, 4))
 EmpTop1000 <- EmpTop1000[lagged_emp != 0]
 EmpTop1000 <- EmpTop1000[!is.na(Emp_rank) & !is.na(lagged_emp)]
 EmpTop1000_portfolio <- EmpTop1000[,.(Emp_Ret = weighted.mean(Ret, lagged_emp, na.rm = TRUE)), .(Year, Month)]
-
-setkey(EmpTop1000_portfolio, Year, Month)
-
-prod(EmpTop1000_portfolio$Emp_Ret + 1) ^ (1/(length(EmpTop1000_portfolio$Emp_Ret)/12)) -1
-sd(EmpTop1000_portfolio$Emp_Ret) * sqrt(12)
+EmpTop1000_portfolio <- EmpTop1000_portfolio[Year >1962,]
 ####
 
-# 2 Composite index, do it tmr
+# 2 Composite index
 bvTop1000_premerge <- bvTop1000[,.(PERMCO, Year, Month, Ret, BV_Weight)]
 cfTop1000_premerge <- cfTop1000[,.(PERMCO, Year, Month, Ret, CF_Weight)]
 DvtTop1000_premerge <- DvtTop1000[,.(PERMCO, Year, Month, Ret, Dvt_Weight)]
@@ -354,9 +331,8 @@ bv_cf_Dvt_rev <-  merge(bv_cf_Dvt, RevTop1000_premerge,  all=T, by = c("PERMCO",
 setorder(bv_cf_Dvt_rev, Year, Month)
 bv_cf_Dvt_rev[,composite_weight := mean(CF_Weight + Dvt_Weight + Rev_Weight + BV_Weight, na.rm = T)]
 composite_portfolio <- bv_cf_Dvt_rev[,.(Composite_Ret = weighted.mean(Ret, composite_weight, na.rm = TRUE)), .(Year, Month)]
+composite_portfolio <- composite_portfolio[Year > 1962,]
 
-prod(composite_portfolio$Composite_Ret + 1) ^ (1/(length(composite_portfolio$Composite_Ret)/12)) -1
-sd(composite_portfolio$Composite_Ret) * sqrt(12)
 #####
 # Reference 
 # select the top 1000 stocks based on cap and value weight them to form the portfolio
@@ -389,72 +365,197 @@ capTop1000 <- capTop1000[lagged_MktCap != 0]
 capTop1000 <- capTop1000[!is.na(mktCap_rank) & !is.na(lagged_MktCap)]
 
 capTop1000_portfolio <- capTop1000[,.(vw_Ret = weighted.mean(Ret, lagged_MktCap, na.rm = TRUE)), .(Year, Month)]
-
-setkey(capTop1000_portfolio, Year, Month)
-
-prod(capTop1000_portfolio$vw_Ret + 1) ^ (1/(length(capTop1000_portfolio$vw_Ret)/12)) -1
-sd(capTop1000_portfolio$vw_Ret) * sqrt(12)
+capTop1000_portfolio <- capTop1000_portfolio[Year >1962]
 #########
+# S&P 500
+vwretd <- as.data.table(read.csv("vwretd.csv"))
+vwretd[, date := ymd(caldt)]
+vwretd[, Year:= year(date)]
+vwretd[, Month:= month(date)]
+vwretd <- vwretd[Year >1962]
 
+
+########################################### collecting data for the summary matrix
+summary <- matrix(nrow=10, ncol=8,dimnames = list(c("SP500","Reference","Book","Income","Revenue",
+                                                    "Sales","Dividends","Employment","Composite", "Average (ex Composite)"), 
+                                                  c("Ending Value of 1","Geometric Return","Volatility",
+                                                    "Sharpe Ratio","Excess Return vs. Reference", "t-statistic for Excess Return","Skewness","Excess Kurtosis")))
+
+# sp 500
+summary[1, 2] <- (prod(vwretd$vwretd + 1) ^ (1/(length(vwretd$vwretd)/12)) -1) * 100
+summary[1, 3] <- sd(vwretd$vwretd ) * sqrt(12) * 100
+summary[1, 7] <- skewness(vwretd$vwretd )
+summary[1, 8] <- kurtosis(vwretd$vwretd ) - 3
+
+# reference
+summary[2, 2] <- (prod(capTop1000_portfolio$vw_Ret + 1) ^ (1/(length(capTop1000_portfolio$vw_Ret)/12)) -1) * 100
+summary[2, 3] <- sd(capTop1000_portfolio$vw_Ret) * sqrt(12) *100
+summary[2, 7] <- skewness(capTop1000_portfolio$vw_Ret)
+summary[2, 8] <- kurtosis(capTop1000_portfolio$vw_Ret) - 3
+
+# book 
+summary[3, 2] <- (prod(bvTop1000_portfolio$BV_Ret + 1) ^ (1/(length(bvTop1000_portfolio$BV_Ret)/12)) -1) * 100
+summary[3, 3] <- sd(bvTop1000_portfolio$BV_Ret) * sqrt(12) *100
+summary[3, 7] <- skewness(bvTop1000_portfolio$BV_Ret)
+summary[3, 8] <- kurtosis(bvTop1000_portfolio$BV_Ret) - 3
+
+
+# cash flow/income
+summary[4, 2] <- (prod(cfTop1000_portfolio$CF_Ret + 1) ^ (1/(length(cfTop1000_portfolio$CF_Ret)/12)) -1) * 100
+summary[4, 3] <- sd(cfTop1000_portfolio$CF_Ret) * sqrt(12) *100
+summary[4, 7] <- skewness(cfTop1000_portfolio$CF_Ret)
+summary[4, 8] <- kurtosis(cfTop1000_portfolio$CF_Ret) - 3
+
+
+# revenue
+summary[5, 2] <- (prod(RevTop1000_portfolio$Rev_Ret + 1) ^ (1/(length(RevTop1000_portfolio$Rev_Ret)/12)) -1) * 100
+summary[5, 3] <- sd(RevTop1000_portfolio$Rev_Ret) * sqrt(12) *100
+summary[5, 7] <- skewness(RevTop1000_portfolio$Rev_Ret)
+summary[5, 8] <- kurtosis(RevTop1000_portfolio$Rev_Ret) - 3
+
+
+# Sales
+summary[6, 2] <- (prod(SaleTop1000_portfolio$Sale_Ret + 1) ^ (1/(length(SaleTop1000_portfolio$Sale_Ret )/12)) -1) * 100
+summary[6, 3] <- sd(SaleTop1000_portfolio$Sale_Ret) * sqrt(12) *100
+summary[6, 7] <- skewness(SaleTop1000_portfolio$Sale_Ret)
+summary[6, 8] <- kurtosis(SaleTop1000_portfolio$Sale_Ret) - 3
+
+
+# dividends
+summary[7, 2] <- (prod(DvtTop1000_portfolio$Dvt_Ret + 1) ^ (1/(length(DvtTop1000_portfolio$Dvt_Ret)/12)) -1) * 100
+summary[7, 3] <- sd(DvtTop1000_portfolio$Dvt_Ret) * sqrt(12) *100
+summary[7, 7] <- skewness(DvtTop1000_portfolio$Dvt_Ret)
+summary[7, 8] <- kurtosis(DvtTop1000_portfolio$Dvt_Ret) - 3
+
+
+# Employment
+summary[8, 2] <- (prod(EmpTop1000_portfolio$Emp_Ret + 1) ^ (1/(length(EmpTop1000_portfolio$Emp_Ret)/12)) -1) * 100
+summary[8, 3] <- sd(EmpTop1000_portfolio$Emp_Ret ) * sqrt(12) *100
+summary[8, 7] <- skewness(EmpTop1000_portfolio$Emp_Ret )
+summary[8, 8] <- kurtosis(EmpTop1000_portfolio$Emp_Ret ) - 3
+
+
+# Composite
+summary[9, 2] <- (prod(composite_portfolio$Composite_Ret + 1) ^ (1/(length(composite_portfolio$Composite_Ret)/12)) -1) * 100
+summary[9, 3] <- sd(composite_portfolio$Composite_Ret) * sqrt(12) *100
+summary[9, 7] <- skewness(composite_portfolio$Composite_Ret )
+summary[9, 8] <- kurtosis(composite_portfolio$Composite_Ret ) - 3
+
+
+# Average 
+summary[10, 2] <- mean(summary[(3:8), 2])
+summary[10, 3] <- mean(summary[(3:8), 3])
+summary[10, 7] <- mean(summary[(3:8), 7])
+summary[10, 8] <- mean(summary[(3:8), 8]) 
+
+
+# import ff factors
+FF_Factors <- as.data.table(read.csv("F-F_Research_Data_Factors.csv"))
+FF_Factors[, date := ymd(X, truncated = 1)]
+FF_Factors[, Year:= year(date)]
+FF_Factors[, Month:= month(date)]
+FF_Factors <- FF_Factors[Year >1962 & Year < 2018]
+FF_Factors <- FF_Factors[, list(RF = RF/100, Year, Month)]
+
+# get sharp ratio
+setorder(FF_Factors, Year, Month)
+setorder(vwretd, Year, Month)
+setorder(capTop1000_portfolio, Year, Month)
+setorder(bvTop1000_portfolio, Year, Month)
+length_yr <- length(vwretd$vwretd)
+
+ex1 <- vwretd$vwretd - FF_Factors$RF
+summary[1, 4] <- (prod(ex1 + 1) ^ (1/(length_yr/12)) -1) * 100 / summary[1, 3]
+summary[1, 1] <- prod(1 + vwretd$vwretd)
+
+ex2 <- capTop1000_portfolio$vw_Ret - FF_Factors$RF
+summary[2, 4]  <- (prod(ex2 + 1) ^ (1/(length_yr/12)) -1) * 100 / summary[2, 3]
+summary[2, 1] <- prod(1 + capTop1000_portfolio$vw_Ret)
+
+ex3 <- bvTop1000_portfolio$BV_Ret - FF_Factors$RF
+summary[3, 4]  <- (prod(ex3 + 1) ^ (1/(length_yr/12)) -1) * 100 / summary[3, 3]
+summary[3, 1] <- prod(1 + bvTop1000_portfolio$BV_Ret)
+
+ex4 <- cfTop1000_portfolio$CF_Ret - FF_Factors$RF
+summary[4, 4]  <-  (prod(ex4 + 1) ^ (1/(length_yr/12)) -1) * 100 / summary[4, 3]
+summary[4, 1] <- prod(1 + cfTop1000_portfolio$CF_Ret)
+
+ex5 <- RevTop1000_portfolio$Rev_Ret - FF_Factors$RF
+summary[5, 4] <- (prod(ex5 + 1) ^ (1/(length_yr/12)) -1) * 100 / summary[5, 3]
+summary[5, 1] <- prod(1 + RevTop1000_portfolio$Rev_Ret)
+
+ex6 <- SaleTop1000_portfolio$Sale_Ret - FF_Factors$RF
+summary[6, 4] <- (prod(ex6 + 1) ^ (1/(length_yr/12)) -1) * 100 / summary[6, 3]
+summary[6, 1] <- prod(1 + SaleTop1000_portfolio$Sale_Ret)
+
+ex7 <- DvtTop1000_portfolio$Dvt_Ret - FF_Factors$RF
+summary[7, 4] <- (prod(ex7 + 1) ^ (1/(length_yr/12)) -1) * 100 / summary[7, 3]
+summary[7, 1] <- prod(1 + DvtTop1000_portfolio$Dvt_Ret)
+
+ex8 <- EmpTop1000_portfolio$Emp_Ret - FF_Factors$RF
+summary[8, 4] <- (prod(ex8 + 1) ^ (1/(length_yr/12)) -1) * 100 / summary[8, 3]
+summary[8, 1] <- prod(1 + EmpTop1000_portfolio$Emp_Ret)
+
+ex9 <-composite_portfolio$Composite_Ret - FF_Factors$RF
+summary[9, 4] <- (prod(ex9 + 1) ^ (1/(length_yr/12)) -1) * 100 / summary[9, 3]
+summary[9, 1] <- prod(1 + composite_portfolio$Composite_Ret)
+
+ex10 <- (bvTop1000_portfolio$BV_Ret + cfTop1000_portfolio$CF_Ret + RevTop1000_portfolio$Rev_Ret + DvtTop1000_portfolio$Dvt_Ret)/4 - FF_Factors$RF 
+summary[10, 4] <-  (prod(ex10 + 1) ^ (1/(length_yr/12)) -1) * 100/ summary[10, 3]
+summary[10, 1] <- mean(summary[(3:8), 1]) 
+# Excess return vs reference
+for(i in 1:10){
+  summary[i, 5] <- summary[i,2] - summary[2,2]
+}
+
+# T-stats for excess return
+n <- length(vwretd$vwretd)
+for(i in 1:10){
+  summary[i, 6] <-  sqrt(n) * summary[i,5]/ summary[i,3]
+}
+
+summary <- apply(summary, 2, round, digits = 2)
+summary[,3] <- round(summary[,3], 1)
+
+write.table(summary, file ="summary.csv", row.names=FALSE, sep=",")
+write.table(composite_portfolio, file="composite_portfolio.csv", row.names=FALSE, sep=",")
+write.table(capTop1000_portfolio, file="reference.csv", row.names=FALSE, sep=",")
+write.table(vwretd, file="vwretd.csv", row.names = FALSE, sep=",")
 
 #####################################################################################
 
-### side note: 
-# cap weighted after sorting example , the return is not necessarily higher, in fact its about the same
-# # 3 Revenue 
-# RevTop1000 <- merged_fundamentals[ T5yrAvgRev_index <= 1000 ]
-# RevTop1000[, c("Rev_rank","lagged_Mktcap") := .(shift(T5yrAvgRev_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
-# 
-# RevTop1000 <- RevTop1000[lagged_Mktcap != 0]
-# RevTop1000 <- RevTop1000[!is.na(Rev_rank) & !is.na(lagged_Mktcap)]
-# RevTop1000_portfolio <- RevTop1000[,.(Rev_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
-# 
-# setkey(RevTop1000_portfolio, Year, Month)
-# 
-# prod(RevTop1000_portfolio$Rev_Ret + 1) ^ (1/(length(RevTop1000_portfolio$Rev_Ret)/12)) -1
-# sd(RevTop1000_portfolio$Rev_Ret) * sqrt(12)
-# ####
-# 
-# # 4 Dividend
-# DvtTop1000 <- merged_fundamentals[ T5yrAvgDvt_index <= 1000 ]
-# DvtTop1000[, c("Dvt_rank","lagged_Mktcap") := .(shift(T5yrAvgDvt_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
-# 
-# DvtTop1000 <- DvtTop1000[lagged_Mktcap != 0]
-# DvtTop1000 <- DvtTop1000[!is.na(Dvt_rank) & !is.na(lagged_Mktcap)]
-# DvtTop1000_portfolio <- DvtTop1000[,.(Dvt_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
-# 
-# setkey(DvtTop1000_portfolio, Year, Month)
-# 
-# prod(DvtTop1000_portfolio$Dvt_Ret + 1) ^ (1/(length(DvtTop1000_portfolio$Dvt_Ret)/12)) -1
-# sd(DvtTop1000_portfolio$Dvt_Ret) * sqrt(12)
-# ####
-# 
-# # 5 sale
-# SaleTop1000 <- merged_fundamentals[ T5yrAvgSale_index <= 1000 ]
-# SaleTop1000[, c("Sale_rank","lagged_Mktcap") := .(shift(T5yrAvgSale_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
-# 
-# SaleTop1000 <- SaleTop1000[lagged_Mktcap != 0]
-# SaleTop1000 <- SaleTop1000[!is.na(Sale_rank) & !is.na(lagged_Mktcap)]
-# SaleTop1000_portfolio <- SaleTop1000[,.(Sale_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
-# 
-# setkey(SaleTop1000_portfolio, Year, Month)
-# 
-# prod(SaleTop1000_portfolio$Sale_Ret + 1) ^ (1/(length(SaleTop1000_portfolio$Sale_Ret)/12)) -1
-# sd(SaleTop1000_portfolio$Sale_Ret) * sqrt(12)
-# ####
-# 
-# # 6 Employment 
-# EmpTop1000 <- merged_fundamentals[ emp_index <= 1000 ]
-# EmpTop1000[, c("Emp_rank","lagged_Mktcap") := .(shift(emp_index,1), shift(Mkt_cap,1)), .(PERMNO)] 
-# 
-# EmpTop1000 <- EmpTop1000[lagged_Mktcap != 0]
-# EmpTop1000 <- EmpTop1000[!is.na(Emp_rank) & !is.na(lagged_Mktcap)]
-# EmpTop1000_portfolio <- EmpTop1000[,.(Emp_Ret = weighted.mean(Ret, lagged_Mktcap, na.rm = TRUE)), .(Year, Month)]
-# 
-# setkey(EmpTop1000_portfolio, Year, Month)
-# 
-# prod(EmpTop1000_portfolio$Emp_Ret + 1) ^ (1/(length(EmpTop1000_portfolio$Emp_Ret)/12)) -1
-# sd(EmpTop1000_portfolio$Emp_Ret) * sqrt(12)
-# ####
-# 
-# 
+FF_Factors <- as.data.table(read.csv("F-F_Research_Data_Factors.csv"))
+FF_Factors[, date := ymd(X, truncated = 1)]
+FF_Factors[, Year:= year(date)]
+FF_Factors[, Month:= month(date)]
+FF_Factors <- FF_Factors[Year >1962 & Year < 2018]
+FF_Factors <- FF_Factors[, list(Mkt.RF = Mkt.RF/100 ,SMB = SMB/100, HML = HML/100, RF = RF/100, Year, Month)]
+
+# regression on excess return 
+compo_FF <- merge(composite_portfolio, FF_Factors, by = c("Year","Month"))
+excompor_lm <- lm((Composite_Ret - RF) ~ Mkt.RF + SMB + HML, data= compo_FF)
+summary(excompor_lm)
+
+vw_FF <- merge(vwretd, FF_Factors, by = c("Year","Month"))
+vw_FF[, vwretd := as.double(vwretd)]
+exvw_lm <-lm((vwretd - RF) ~ Mkt.RF + SMB + HML, data = vw_FF)
+summary(exvw_lm)
+
+
+######################## find alpha and betas 
+
+summary_table2 <- matrix(nrow=10, ncol=6,dimnames = list(c("SP500","Reference","Book","Income","Revenue",
+                                                    "Sales","Dividends","Employment","Composite", "Average (ex Composite)"), 
+                                                  c("Ending Value of 1","Geometric Return",
+                                                    "CAPM Beta Vs Reference","Excess Return vs. Reference", "CAPM Alpha Vs Reference","t-statistic for CAPM Alpha")))
+
+summary_table2[,1] <- summary[,1]
+summary_table2[,2] <- summary[,2]
+summary_table2[,4] <- summary[,5]
+
+ex1_lm <- lm((vwretd$vwretd - FF_Factors$RF) ~ (capTop1000_portfolio$vw_Ret- FF_Factors$RF))
+ex2_lm <- lm((capTop1000_portfolio$vw_Ret - FF_Factors$RF) ~ (capTop1000_portfolio$vw_Ret- FF_Factors$RF))
+ex3_lm <- lm((capTop1000_portfolio$vw_Ret - FF_Factors$RF) ~ (capTop1000_portfolio$vw_Rett- FF_Factors$RF))
+
+## go back to the average cmposite 
+
