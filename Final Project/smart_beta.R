@@ -177,21 +177,21 @@ finaldata<- as.data.table(read.csv("final_data.csv"))
 setorder(finaldata, PERMCO, Year, Month)
 finaldata_dec <- finaldata[Month==12,]
 
-finaldata_dec[, T5yrAvgCF := rollapply(CF_NET, 5, 
+finaldata_dec[, T5yrAvgCF := shift(rollapply(CF_NET, 5, 
                                      function(x){ mean(x, na.rm = T)}, fill=NA, 
-                                     align="right", partial = T), by = c("PERMCO")]
+                                     align="right", partial = T)), by = c("PERMCO")]
 
-finaldata_dec[, T5yrAvgRev := rollapply(revt, 5, 
+finaldata_dec[, T5yrAvgRev := shift(rollapply(revt, 5, 
                                      function(x){ mean(x, na.rm = T)}, fill=NA, 
-                                     align="right", partial = T), by = c("PERMCO")]
+                                     align="right", partial = T)), by = c("PERMCO")]
 
-finaldata_dec[, T5yrAvgSale := rollapply(sale, 5, 
+finaldata_dec[, T5yrAvgSale := shift(rollapply(sale, 5, 
                                         function(x){ mean(x, na.rm = T)}, fill=NA, 
-                                        align="right", partial = T), by = c("PERMCO")]
+                                        align="right", partial = T)), by = c("PERMCO")]
 
-finaldata_dec[, T5yrAvgDvt := rollapply(dvt, 5, 
+finaldata_dec[, T5yrAvgDvt := shift(rollapply(dvt, 5, 
                                          function(x){ mean(x, na.rm = T)}, fill=NA, 
-                                         align="right", partial = T), by = c("PERMCO")]
+                                         align="right", partial = T)), by = c("PERMCO")]
 #####################################################################################
 
 
@@ -522,7 +522,7 @@ write.table(composite_portfolio, file="composite_portfolio.csv", row.names=FALSE
 write.table(capTop1000_portfolio, file="reference.csv", row.names=FALSE, sep=",")
 write.table(vwretd, file="vwretd.csv", row.names = FALSE, sep=",")
 
-#####################################################################################
+######################################## Estimate alpha and beta ##################################
 
 FF_Factors <- as.data.table(read.csv("F-F_Research_Data_Factors.csv"))
 FF_Factors[, date := ymd(X, truncated = 1)]
@@ -534,28 +534,16 @@ FF_Factors <- FF_Factors[, list(Mkt.RF = Mkt.RF/100 ,SMB = SMB/100, HML = HML/10
 # regression on excess return 
 compo_FF <- merge(composite_portfolio, FF_Factors, by = c("Year","Month"))
 excompor_lm <- lm((Composite_Ret - RF) ~ Mkt.RF + SMB + HML, data= compo_FF)
+alpha <- excompor_lm$coefficients[1]
+b1 <- excompor_lm$coefficients[2]
+b2 <- excompor_lm$coefficients[3]
+b3 <- excompor_lm$coefficients[4]
 summary(excompor_lm)
-
-vw_FF <- merge(vwretd, FF_Factors, by = c("Year","Month"))
-vw_FF[, vwretd := as.double(vwretd)]
-exvw_lm <-lm((vwretd - RF) ~ Mkt.RF + SMB + HML, data = vw_FF)
-summary(exvw_lm)
-
-
-######################## find alpha and betas 
-
-summary_table2 <- matrix(nrow=10, ncol=6,dimnames = list(c("SP500","Reference","Book","Income","Revenue",
-                                                    "Sales","Dividends","Employment","Composite", "Average (ex Composite)"), 
-                                                  c("Ending Value of 1","Geometric Return",
-                                                    "CAPM Beta Vs Reference","Excess Return vs. Reference", "CAPM Alpha Vs Reference","t-statistic for CAPM Alpha")))
-
-summary_table2[,1] <- summary[,1]
-summary_table2[,2] <- summary[,2]
-summary_table2[,4] <- summary[,5]
-
-ex1_lm <- lm((vwretd$vwretd - FF_Factors$RF) ~ (capTop1000_portfolio$vw_Ret- FF_Factors$RF))
-ex2_lm <- lm((capTop1000_portfolio$vw_Ret - FF_Factors$RF) ~ (capTop1000_portfolio$vw_Ret- FF_Factors$RF))
-ex3_lm <- lm((capTop1000_portfolio$vw_Ret - FF_Factors$RF) ~ (capTop1000_portfolio$vw_Rett- FF_Factors$RF))
-
-## go back to the average cmposite 
+estiamteAandB <- data.table(
+  alpha = round(alpha,4),
+  Market.RF = round(b1,2),
+  SMB = round(b2,2),
+  HML = round(b3,2)
+)
+write.table(estiamteAandB, file="alpha.csv", row.names = FALSE, sep=",")
 
